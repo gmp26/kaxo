@@ -1,0 +1,36 @@
+/* some style */
+body {
+    background-color: #dcc !important;
+}
+
+.full-width {
+    width:100%;
+    text-align: center;
+    margin: 5px 0;
+}
+
+.dot {
+    stroke: #e0f0e8;
+    opacity: 0.8;
+    cursor: pointer;
+}
+
+.dot.claimed {
+    pointer-events: none;
+}
+
+.dot:hover {
+    opacity: 1;
+    stroke: #ddddee;
+}
+
+.status {
+    width: 260px;
+    margin: 0 auto;
+    color: white;
+    text-align: center;
+    font-size: 1.6em;
+    font-family: "Helvetica Neue" "Arial" sans;
+    border-bottom-left-radius: 15px;
+    border-bottom-right-radius: 15px;
+}
