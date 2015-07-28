@@ -57,7 +57,7 @@
              ;; #! /bin/sh
              ;; emacsclient -n +$2 $1
              ;;
-             ;; :open-file-command "myfile-opener"
+             :open-file-command "figwheel-opener.sh"
 
              ;; if you want to disable the REPL
              ;; :repl false
