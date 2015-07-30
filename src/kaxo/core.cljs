@@ -27,12 +27,15 @@
 (def initial-state {:n 5
                     :player :a
                     :players 1
-                    :a-first true
-                    :crosses #{[1 0]}
-                    :lines #{
+                    :a-crosses #{[1 0]}
+                    :b-crosses #{[1 0]}
+                    :a-lines #{
                              [[0 0] [1 1]]
                              [[2 2] [1 3]]
                              [[4 3] [1 0]]
+                             }
+                    :b-lines #{
+                             [[0 2] [1 2]]
                              }
                     })
 
@@ -68,21 +71,14 @@
 (def gap 36)
 (defn units [x] (* x unit))
 (defn gaps [x] (* (units (+ x 0.5)) gap))
-(def tick-interval 1000)
 (def al-think-time 2000)
 
 
-(def player-colours {:a "rgb(0, 153, 255)"
-                     :b "rgb(238, 68, 102)"
-                     :none "rgb(220,255,220)"
-                     :draw "rgb(74, 157, 97)"
-                     })
-
-(def player-class {:a "blue"
-                   :b "red"
-                   :none "grey"
-                   :draw "draw"
-                   })
+(def colours {:a "rgb(0, 153, 255)"
+              :b "rgb(238, 68, 102)"
+              :none "rgb(220,255,220)"
+              :draw "rgb(74, 157, 97)"
+              })
 
 ;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -90,7 +86,7 @@
 ;;
 (defn game-drawn? [g] false)
 
-(defn game-over? [g] true)
+(defn game-over? [g] false)
 
 (defn get-ai-move [player] nil)
 
@@ -103,10 +99,19 @@
 ;;
 ;; Rendering
 ;;
-(defn fill-color [g p]
-  (if ((:crosses g) p) 
-    (:a player-colours)
-    (:none player-colours)))
+(defn cross-colour [g point]
+  (if ((:a-crosses g) point) 
+    (:a colours)
+    (if ((:b-crosses g) point)
+      (:b colours)
+      (:none colours))))
+
+(defn line-colour [g line]
+  (if ((:a-lines g) line) 
+    (:a colours)
+    (if ((:b-lines g) line)
+      (:b colours)
+      (:none colours))))
 
 (defn dot-sep [n]
   (Math.floor (/ 300 n)))
@@ -119,14 +124,22 @@
 ;;
 (declare reset-game)
 
+(defn resize-game-board!! [n]
+  (swap! game #(assoc % 
+                   :a-crosses #{}
+                   :b-crosses #{}
+                   :a-lines #{}
+                   :b-lines #{}
+                   :n n)))
+
 (defn up-tap [event]
   "grow the game by 1 unit up to a max-n square"
   (.stopPropagation event)
   (.preventDefault event)
   (let [old-n (:n @game)
         new-n (if (< old-n max-n) (inc old-n) max-n)]
-    (swap! game #(assoc % :crosses #{}
-                         :n new-n))))
+    (resize-game-board!! new-n)
+    ))
 
 (defn down-tap [event]
   "shrink the game by 1 unit down to a min-n square"
@@ -134,16 +147,21 @@
   (.preventDefault event)
   (let [old-n (:n @game)
         new-n (if (> old-n min-n) (- old-n 1) min-n)]
-    (swap! game #(assoc % :crosses #{}
-                         :n new-n))))
+    (resize-game-board!! new-n)
+    ))
 
 (defn claim-a-point [cross point]
-  (swap! game #(assoc % :player :b :crosses (conj cross point))))
+  (swap! game #(assoc % :player :b :a-crosses (conj cross point))))
+
+(defn claim-b-point [cross point]
+  (swap! game #(assoc % :player :a :b-crosses (conj cross point))))
 
 
-(defn claim-point [cross point player]
-  (if (not (cross point))
-    (claim-a-point cross point)))
+(defn claim-point [a-crosses b-crosses point player]
+  (if (and (not (a-crosses point)) (not (b-crosses point)))
+    (if (= player :a)
+      (claim-a-point a-crosses point)
+      (claim-b-point b-crosses point))))
 
 (declare timeout)
 
@@ -155,38 +173,46 @@
   "Call f, optionally with arguments xs, after ms milliseconds"
   (js/setTimeout #(apply f xs) ms))
 
-(defn single-player-point [g crosses point] 
+(defn single-player-point [g a-crosses b-crosses point] 
   (do
     (when (not (or (game-over? g) (game-drawn? g)))
-      (claim-a-point crosses point))
+      (claim-a-point a-crosses point))
     (let [newg @game]
       (when (not (or (game-over? newg) (game-drawn? newg)))
         (timeout al-think-time #(->> newg
                                      (computer-turn)
-                                     (claim-a-point crosses)))))))
+                                     (claim-b-point b-crosses)))))))
 
 (defn handle-tap [event]
   (let [p (reader/read-string (.. event -target -id))
         g @game
-        crosses (:crosses g)
+        a-crosses (:a-crosses g)
+        b-crosses (:b-crosses g)
         pl (:player g)]
     (do 
-      (.stopPropagation event)
       (.preventDefault event)
       (if (= (:players g) 2)
-        (claim-point crosses p pl)
+        (claim-point a-crosses b-crosses p pl)
         (when (= pl :a)
-          (single-player-point g crosses p))))))
+          (single-player-point g a-crosses b-crosses p))))))
+
+(defn change-players [count]
+  (swap! game #(assoc % 
+                 :players count 
+                 :player :a 
+                 :a-crosses #{} 
+                 :b-crosses #{} 
+                 :a-lines #{} 
+                 :b-lines #{} 
+                 )))
 
 (defn one-player [event]
-  (.stopPropagation event)
   (.preventDefault event)
-  (swap! game #(assoc % :players 1 :player :a :crosses #{} )))
+  (change-players 1))
 
 (defn two-player [event]
-  (.stopPropagation event)
   (.preventDefault event)
-  (swap! game #(assoc % :players 2 :player :a :crosses #{} )))
+  (change-players 2))
 
 (defn reset-game 
   ([]
@@ -206,10 +232,58 @@
 ;;
 ;; rendering game board
 ;;
+(declare get-status)
+(declare get-fill)
+
+(defn line-data [[p1 p2]]
+  "Line path data"
+  (let [p2s #(str (gaps (first %)) " " (gaps (second %)))]
+    (str "M " (p2s p1)
+         " L " (p2s p2))) 
+  )
+
+(defn crossed-points [[p1 p2]]
+  "Points that a line crosses"
+  (let [grad (/ (- (first p1) (first p2)) (- (second p1) (second p2)))]
+    )
+)
+
+(r/defc render-line [g player line]
+  (let [vline (vec line)]
+    [:path {
+            :d (line-data vline)
+            :fill "none" ;;(get-fill (get-status g))
+            :opacity 0.5
+            :stroke (line-colour g vline)
+            :stroke-width "3"
+            }]))
+
+(r/defc render-lines [g]
+  (let [a-lines (:a-lines g)
+        b-lines (:b-lines g)]       
+    [:g
+     (map #(render-line g :a %) (vec a-lines))
+     (map #(render-line g :b %) (vec b-lines))
+     ]))
+
+(r/defc render-cross [g [x y :as point]]
+  (let [a 5
+        cmd (fn [c x y] (str c " " (+ a x) " " (+ a y)))
+        m #(cmd " M" %1 %2)
+        l #(cmd " L" %1 %2)
+        ]
+    [:g {:transform (str "translate(" (- (gaps x) a) "," (- (gaps y) a) ")")} 
+     [:path {:d (str (m (- a) (- a)) (l a a) (m (- a) a) (l a (- a)))
+             :stroke-width (str a)
+             :opacity 1.0
+             :stroke (cross-colour g point)
+             :fill "none"}
+            ]]))
+
 (r/defc svg-dot < r/reactive [n x y fill]
   (let [p [x y]
         g (r/react game)
-        the-class #(if ((:crosses g) p)  "dot claimed" "dot")
+        the-class #(if ((:a-crosses g) p)  "dot claimed" "dot")
         ]
     [:circle {
               :class (the-class)
@@ -225,34 +299,6 @@
               :on-touch-end handle-tap
               }]))
 
-(declare get-status)
-(declare get-fill)
-
-(defn line-data [[p1 p2]]
-  "Line path data"
-  (let [p2s #(str (gaps (first %)) " " (gaps (second %)))]
-    (str "M " (p2s p1)
-         " L " (p2s p2))) 
-  )
-
-
-
-(r/defc render-lines [g]
-  (let [lines (:lines g)]       
-    [:g
-     (map
-      (fn [line]
-        [:path {
-                :d (line-data (vec line))
-                :fill "none" ;;(get-fill (get-status g))
-                :opacity 0.5
-                :stroke (get-fill (get-status g))
-                :stroke-width "3"
-                }])
-      (vec lines))
-     ]))
-
-
 (r/defc svg-grid < r/reactive [g]
   [:section {:key "b3" :style {:height "60%"}}
    [:svg {:view-box (str "0 0 " bound-width " " bound-height) 
@@ -263,10 +309,14 @@
       [:g {:id "box" :transform (str "scale(" (* 1 (/ max-n n)) ")")}
        (for [x (range n)]
          (for [y (range n)]
-           (svg-dot n x y (fill-color g [x y])) ))
-       (when (and (game-over? g) (not (game-drawn? g))) 
-         (render-lines g)
-         )
+           (do
+             [:g
+              (if (or ((:a-crosses g) [x y]) ((:b-crosses g) [x y]))
+                (render-cross g [x y])                
+                (svg-dot n x y (cross-colour g [x y])) 
+                )])
+           ))
+       (render-lines g)
        ])]])
 
 (r/defc debug-game < r/reactive [g]
@@ -307,7 +357,7 @@
   (status messages))
 
 (defn get-fill [status]
-  ((status message-colours) player-colours))
+  ((status message-colours) colours))
 
 (r/defc status-bar < r/reactive [g]
   (let [status (get-status g)]
@@ -319,7 +369,7 @@
                :font-size 24
                :color "#888"
                }}
-   "Claim all 4 corners of a square to win"])
+   "Last player able to move wins"])
 
 (defn random-dark-colour []
   (let [dark #(+ 100 (rand-int 70))]
@@ -327,7 +377,7 @@
 
 (def dark-rgb (random-dark-colour))
 
-(r/defc goal [g]
+#_(r/defc goal [g]
   (let [n (:n g)]
     [:p {:style {
                  :text-align "center"
