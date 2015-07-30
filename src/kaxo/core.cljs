@@ -156,7 +156,6 @@
 (defn claim-b-point [cross point]
   (swap! game #(assoc % :player :a :b-crosses (conj cross point))))
 
-
 (defn claim-point [a-crosses b-crosses point player]
   (if (and (not (a-crosses point)) (not (b-crosses point)))
     (if (= player :a)
@@ -296,25 +295,37 @@
               :id (str "[" x " " y "]")
               :key (str "[" x " " y "]")
               :on-click handle-tap
+              ;;:on-mouse-down handle-down
+              ;;:on-touch-start handle-down
               :on-touch-end handle-tap
               }]))
+
+(defn handle-move [event]
+  (.preventDefault event)
+  (let [native (.-nativeEvent event)
+        offset [(.-offsetX native) (.-offsetY native)]]
+    (.log js/console event)
+    (.log js/console (.-nativeEvent event))
+    (.log js/console (str offset) ))
+  )
 
 (r/defc svg-grid < r/reactive [g]
   [:section {:key "b3" :style {:height "60%"}}
    [:svg {:view-box (str "0 0 " bound-width " " bound-height) 
           :height "100%"
           :width "100%"
-          :key "b3"}
+          :key "b3"
+          :on-mouse-move handle-move
+          :on-touch-move handle-move
+}
     (let [n (:n g)] 
       [:g {:id "box" :transform (str "scale(" (* 1 (/ max-n n)) ")")}
        (for [x (range n)]
          (for [y (range n)]
-           (do
-             [:g
-              (if (or ((:a-crosses g) [x y]) ((:b-crosses g) [x y]))
-                (render-cross g [x y])                
-                (svg-dot n x y (cross-colour g [x y])) 
-                )])
+           (if (or ((:a-crosses g) [x y]) ((:b-crosses g) [x y]))
+             (render-cross g [x y])                
+             (svg-dot n x y (cross-colour g [x y])) 
+             )
            ))
        (render-lines g)
        ])]])
