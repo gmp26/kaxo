@@ -65,8 +65,8 @@
                       :draw :draw
                       })
 
-(def bound-width 320)
-(def bound-height 320)
+(def viewport-width 320)
+(def viewport-height 320)
 (def max-n 9)
 (def min-n 3)
 (def unit 1)
@@ -74,6 +74,13 @@
 (defn units [x] (* x unit))
 (defn gaps [x] (* (units (+ x 0.5)) gap))
 (def al-think-time 2000)
+
+;;
+;; svg-width = 716
+;; n 8
+;; cx 306
+;; scale 1
+;;
 
 
 (def colours {:a "rgb(0, 153, 255)"
@@ -307,11 +314,81 @@
       ))
 )
 
+(defn svg-element-width [el]
+  (.. el -width -baseVal -value))
+
+(defn svg-element-height [el]
+  (.. el -height -baseVal -value))
+
+;;;;
+;;
+;; breakdown into individual transforms
+;;
+(defn scale [factor]
+  (fn [[x y]] ([(* factor x)] [(* factor y)])))
+
+(defn translate [offset-left offset-top]
+  (fn [[x y]] ([(+ offset-left x)] [(+ offset-top y)])))
+
+(defn rotate [theta]
+  (let [c (Math.cos theta)
+        s (Math.sin theta)]
+    (fn [[x y]] ([(- (* x c) (* y s)) (+ (* x s) (* y c))]))))
+
+(defn svg->mouse [svg-el]
+  (let [offset-top (.-offsetTop svg-el)
+        offset-left (.-offsetLeft svg-el)
+        offset-width (.-offsetWidth svg-el)
+        view-box (.-viewBox svg-el)
+        ]
+    (comp (translate (- (.-x view-box)) (- (.-y view-box)))
+          (scale (/ offset-width (.-width view-box)))
+          (translate offset-left offset-top))))
+
+(defn mouse->svg [svg-el]
+  (let [offset-top (.-offsetTop svg-el)
+        offset-left (.-offsetLeft svg-el)
+        offset-width (.-offsetWidth svg-el)
+        view-box (.-viewBox svg-el)
+        ]
+    (comp (translate (- offset-left) (- offset-top))
+          (scale (/ (.-width view-box) offset-width))
+          (translate (.-x view-box) (.-y view-box)))))
+
+;;;;;;;;
+#_(defn svg-scale [actual-width vp-width offset-top offset-left]
+  (fn [[x y] :as game-point] 
+    (let [scale  (/ actual-width vp-width)]
+      [(+ (* scale x) offset-left) (+ (* scale y) offset-top)] )))
+
+(defn svg-scale [actual-width vp-width]
+  (/ actual-width vp-width))
+
+(defn svg-inv-scale [actual-width vp-width]
+  (/ vp-width actual-width))
+
+(defn svg-transform [g]
+  #(* % (/ max-n (:n g))))
+
+(defn svg-inv-transform [g]
+  #(* % (/ (:n g) max-n)))
+
+(defn g-transform [g]
+  ((svg-transform g) 
+     (svg-scale (svg-element-width (el "grid")) viewport-width)))
+
+(defn g-inv-transform [g]
+  
+)
+
+
 (defn handle-move [event]
   (.preventDefault event)
+  (.log js/console (.. event -target -width))
   (let [point (eventXY event)]
     )
   )
+
 
 (r/defc svg-dot < r/reactive [n x y fill]
   (let [p [x y]
@@ -328,36 +405,39 @@
               :stroke-width (units  8)
               :id (str "[" x " " y "]")
               :key (str "[" x " " y "]")
-              :on-click handle-tap
+              :on-click handle-move
               :on-mouse-down handle-move
               :on-touch-start handle-move
-              :on-touch-end handle-tap
+              :on-touch-end handle-move
               }]))
 
 
 
 
 (r/defc svg-grid < r/reactive [g]
-  [:svg {:view-box (str "0 0 " bound-width " " bound-height) 
-         :height "100%"
-         :width "100%"
-         :key "b3"
-         :on-mouse-move handle-move
-         :on-touch-start handle-move
-         :on-touch-end handle-move
-         :on-touch-move handle-move
-         }
-   (let [n (:n g)] 
-     [:g {:id "box" :transform (str "scale(" (* 1 (/ max-n n)) ")")}
-      (for [x (range n)]
-        (for [y (range n)]
-          (if (or ((:a-crosses g) [x y]) ((:b-crosses g) [x y]))
-            (render-cross g [x y])                
-            (svg-dot n x y (cross-colour g [x y])) 
-            )
-          ))
-      (render-lines g)
-      ])])
+  [:span "hello there"
+   [:svg {:view-box (str "0 0 " viewport-width " " viewport-height) 
+          :height "80%"
+          :width "80%"
+          :key "b3"
+          :id "grid"
+          :on-mouse-move handle-move
+          :on-touch-start handle-move
+          :on-touch-end handle-move
+          :on-touch-move handle-move
+          :style {:display-mode "inline-block"}
+          }
+    (let [n (:n g)] 
+      [:g {:id "box" :transform (str "scale(" (* 1 (/ max-n n)) ")")}
+       (for [x (range n)]
+         (for [y (range n)]
+           (if (or ((:a-crosses g) [x y]) ((:b-crosses g) [x y]))
+             (render-cross g [x y])                
+             (svg-dot n x y (cross-colour g [x y])) 
+             )
+           ))
+       (render-lines g)
+       ])]])
 
 (r/defc debug-game < r/reactive [g]
   "heads up game state display"
