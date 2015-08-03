@@ -1,5 +1,6 @@
 (ns ^:figwheel-always kaxo.core
-    (:require [rum :as r]
+    (:require [game.gestures :refer [bind-touch] :as gest] 
+              [rum :as r]
               [cljs.reader :as reader]
               [clojure.set :refer (intersection)]
               [cljsjs.react]
@@ -37,6 +38,7 @@
                     :b-lines #{
                              [[0 2] [1 2]]
                              }
+                    :draw-line nil
                     })
 
 (defonce game (atom initial-state))
@@ -279,6 +281,38 @@
              :fill "none"}
             ]]))
 
+(defn touchXY [event]
+  (let [touch (aget (.-changedTouches event) 0)
+        client [(.-clientX touch) (.-clientY touch)]]
+    #_(.log js/console (str " client " client))
+    client
+    ))
+
+(defn mouseXY [event]
+  (let [client [(.-clientX event) (.-clientY event)]]
+    #_(.log js/console (str " client " client))
+    client
+))
+
+(defn eventXY [event]
+  (if (and 
+       (= (subs (.-type event) 0 5) "touch") 
+       (nil? (aget (.-touches event) 0) ))
+    prn (.-type event))
+  (let [type (subs (.-type event) 0 5)]
+    (condp = type 
+      "mouse" (prn "mouse " (mouseXY event))
+      "touch" (prn "touch " (touchXY event))
+      (prn (str "other " (.-type event)))
+      ))
+)
+
+(defn handle-move [event]
+  (.preventDefault event)
+  (let [point (eventXY event)]
+    )
+  )
+
 (r/defc svg-dot < r/reactive [n x y fill]
   (let [p [x y]
         g (r/react game)
@@ -295,40 +329,35 @@
               :id (str "[" x " " y "]")
               :key (str "[" x " " y "]")
               :on-click handle-tap
-              ;;:on-mouse-down handle-down
-              ;;:on-touch-start handle-down
+              :on-mouse-down handle-move
+              :on-touch-start handle-move
               :on-touch-end handle-tap
               }]))
 
-(defn handle-move [event]
-  (.preventDefault event)
-  (let [native (.-nativeEvent event)
-        offset [(.-offsetX native) (.-offsetY native)]]
-    (.log js/console event)
-    (.log js/console (.-nativeEvent event))
-    (.log js/console (str offset) ))
-  )
+
+
 
 (r/defc svg-grid < r/reactive [g]
-  [:section {:key "b3" :style {:height "60%"}}
-   [:svg {:view-box (str "0 0 " bound-width " " bound-height) 
-          :height "100%"
-          :width "100%"
-          :key "b3"
-          :on-mouse-move handle-move
-          :on-touch-move handle-move
-}
-    (let [n (:n g)] 
-      [:g {:id "box" :transform (str "scale(" (* 1 (/ max-n n)) ")")}
-       (for [x (range n)]
-         (for [y (range n)]
-           (if (or ((:a-crosses g) [x y]) ((:b-crosses g) [x y]))
-             (render-cross g [x y])                
-             (svg-dot n x y (cross-colour g [x y])) 
-             )
-           ))
-       (render-lines g)
-       ])]])
+  [:svg {:view-box (str "0 0 " bound-width " " bound-height) 
+         :height "100%"
+         :width "100%"
+         :key "b3"
+         :on-mouse-move handle-move
+         :on-touch-start handle-move
+         :on-touch-end handle-move
+         :on-touch-move handle-move
+         }
+   (let [n (:n g)] 
+     [:g {:id "box" :transform (str "scale(" (* 1 (/ max-n n)) ")")}
+      (for [x (range n)]
+        (for [y (range n)]
+          (if (or ((:a-crosses g) [x y]) ((:b-crosses g) [x y]))
+            (render-cross g [x y])                
+            (svg-dot n x y (cross-colour g [x y])) 
+            )
+          ))
+      (render-lines g)
+      ])])
 
 (r/defc debug-game < r/reactive [g]
   "heads up game state display"
@@ -420,12 +449,14 @@
      #_(goal g)
      (debug-game g)]))
 
+(defn initialise []
+  (.initializeTouchEvents js/React true)
 
-;;
-;; mount main component on html game element
-;;
-(r/mount (game-container) (el "game"))
+  ;; mount main component on html game element
+  (r/mount (game-container) (el "game"))
+  )
 
+(initialise)
 
 ;;
 ;; optionally do something on game reload
