@@ -32,10 +32,11 @@
                     :b-crosses #{}
                     :a-lines #{}
                     :b-lines #{}
-                    :draw-line nil
+                    ;:draw-line nil
                     })
 
 (defonce game (atom initial-state))
+(defonce draw-line (atom nil))
 
 (def messages {:yours "Your turn"
                :als   "My turn"
@@ -203,8 +204,10 @@
 (defn reset-game 
   ([]
    (swap! game #(assoc % :player :a
-                         :crosses #{}
-                         :lines #{}
+                         :a-crosses #{}
+                         :b-crosses #{}
+                         :a-lines #{}
+                         :b-lines #{}
                          )))
   ([event] 
    (.preventDefault event) 
@@ -234,24 +237,39 @@
     )
 )
 
-(r/defc render-line [g player line]
-  (let [vline (vec line)]
-    [:path {
-            :d (line-data vline)
-            :fill "none" ;;(get-fill (get-status g))
-            :opacity 0.5
-            :stroke (line-colour g vline)
-            :stroke-width "3"
-            }]))
+(r/defc render-draw-line < r/reactive [g]
+  (let [[[x1 y1] [x2 y2] :as line] (r/react draw-line)]
+    (when line
+      [:line {:stroke-linecap "round"
+              :opacity 0.5
+              :stroke ((:player g) colours)
+              :stroke-width 3
+              :x1 (gaps x1)
+              :y1 (gaps y1)
+              :x2 (gaps x2)
+              :y2 (gaps y2)}]))
+  )
+
+(r/defc render-line [g player [[x1 y1] [x2 y2] :as line]]
+  [:line {:stroke-linecap "round"
+          :opacity 0.5
+          :stroke (line-colour g line)
+          :stroke-width 3
+          :x1 (gaps x1)
+          :y1 (gaps y1)
+          :x2 (gaps x2)
+          :y2 (gaps y2)}]
+  )
 
 (r/defc render-lines [g]
   (let [a-lines (:a-lines g)
         b-lines (:b-lines g)
-        draw-line (:draw-line g)]       
+        ;draw-line (:draw-line g)
+        ]       
     [:g
      (map #(render-line g :a %) (vec a-lines))
      (map #(render-line g :b %) (vec b-lines))
-     (when draw-line (render-line g (:player g) draw-line))
+     ;(when draw-line (render-line g (:player g) draw-line))
      ]))
 
 (r/defc render-cross [g [x y :as point]]
@@ -393,32 +411,31 @@
 (defn handle-start-line [event]
   (let [pointer (eventXY event)
         dot ((mouse->dot @game (el "grid")) pointer)]
-    (swap! game #(assoc % 
+    (reset! draw-line [dot dot])
+    #_(swap! game #(assoc % 
                    :draw-line [dot dot]
                    ))))
 
 (defn handle-move-line [event]
   (let [pointer (eventXY event)
         g @game
-        draw-line (:draw-line g)
+        dl @draw-line
         game-pointer ((mouse->game g (el "grid")) pointer)]
-    (when draw-line
-      #_(prn "game-pointer " game-pointer)
-      (swap! game #(assoc % 
-                     :draw-line [(first draw-line) game-pointer]
-                     )))))
+    (when dl
+      (reset! draw-line [(first dl) game-pointer])
+)))
 
 (defn handle-end-line [event]
   (let [pointer (eventXY event)
         g @game
-        draw-line (:draw-line g)
+        ;draw-start (first (:draw-line g))
+        draw-start (first @draw-line)
         dot ((mouse->dot g (el "grid")) pointer)
         line-selector (if (= :a (:player g)) :a-lines :b-lines)
-        updated-lines (conj (line-selector g) [(first draw-line) dot])]
-    (swap! game #(assoc %
-                   line-selector updated-lines
-                   :draw-line nil 
-                   ))))
+        updated-lines (conj (line-selector g) [draw-start dot])]
+    (swap! game #(assoc % line-selector updated-lines))
+    (reset! draw-line nil)
+    ))
 
 (defn handle-move [event]
   (.preventDefault event)
@@ -477,11 +494,14 @@
              )
            ))
        (render-lines g)
+       (render-draw-line g)
        ]])])
 
 (r/defc debug-game < r/reactive [g]
   "heads up game state display"
-  [:p {:key "b1"} (str (dissoc g :squares))])
+  [:div
+   [:p {:key "b1"} (str (dissoc g :squares))]
+   [:p {:key "b2"} (str (r/react draw-line))]])
 
 
 
