@@ -73,14 +73,6 @@
 (defn spag [x] (stinu (- (/ x gap) 0.5))) ; inverse gaps
 (def al-think-time 2000)
 
-;;
-;; svg-width = 716
-;; n 8
-;; cx 306
-;; scale 1
-;;
-
-
 (def colours {:a "rgb(0, 153, 255)"
               :b "rgb(238, 68, 102)"
               :none "rgb(220,255,220)"
@@ -231,15 +223,16 @@
          " L " (p2s p2))) 
   )
 
-(defn crossed-points [[p1 p2]]
-  "Points that a line crosses"
-  (let [grad (/ (- (first p1) (first p2)) (- (second p1) (second p2)))]
-    )
-)
+
+
+(declare good-line?)
 
 (r/defc render-draw-line < r/reactive [g]
-  (let [[[x1 y1] [x2 y2] :as line] (r/react draw-line)]
-    (when line
+  (let [[[x1 y1] [x2 y2] :as [p1 p2 :as line]] (r/react draw-line)]
+    ; we don't want to render a line before the mouse moves as
+    ; it prevents mouseup/touchend detection on the dot 
+    ; preventing clicks/taps there.
+    (when (not= p1 p2)
       [:line {:stroke-linecap "round"
               :opacity 0.5
               :stroke ((:player g) colours)
@@ -264,12 +257,10 @@
 (r/defc render-lines [g]
   (let [a-lines (:a-lines g)
         b-lines (:b-lines g)
-        ;draw-line (:draw-line g)
         ]       
     [:g
      (map #(render-line g :a %) (vec a-lines))
      (map #(render-line g :b %) (vec b-lines))
-     ;(when draw-line (render-line g (:player g) draw-line))
      ]))
 
 (r/defc render-cross [g [x y :as point]]
@@ -407,14 +398,11 @@
         (when (= pl :a)
           (single-player-point g a-crosses b-crosses p))))))
 
-
 (defn handle-start-line [event]
   (let [pointer (eventXY event)
         dot ((mouse->dot @game (el "grid")) pointer)]
     (reset! draw-line [dot dot])
-    #_(swap! game #(assoc % 
-                   :draw-line [dot dot]
-                   ))))
+))
 
 (defn handle-move-line [event]
   (let [pointer (eventXY event)
@@ -425,23 +413,41 @@
       (reset! draw-line [(first dl) game-pointer])
 )))
 
+(defn canonical-line [[p1 p2 :as line]]
+  (if (or (< (first p1) (first p2))
+          (and (= (first p1) (first p2))
+               (< (second p1) (second p2)))
+          )
+    line
+    [p2 p1]))
+
+(defn good-slope? [[p1 p2]]
+  "Points that a line crosses"
+  (let [dx (- (first p1) (first p2))
+        dy (- (second p1) (second p2))
+        ]
+    (or (= 0 dx) (= 0 dy) (= dx dy) (= dx (- dy))))
+)
+
+(defn good-line? [[p1 p2 :as line]]
+  (and (not= p1 p2) (good-slope? line))
+  )
+
 (defn handle-end-line [event]
   (let [pointer (eventXY event)
         g @game
-        ;draw-start (first (:draw-line g))
         draw-start (first @draw-line)
         dot ((mouse->dot g (el "grid")) pointer)
-        line-selector (if (= :a (:player g)) :a-lines :b-lines)
-        updated-lines (conj (line-selector g) [draw-start dot])]
-    (swap! game #(assoc % line-selector updated-lines))
+        line (canonical-line [draw-start dot])
+        ]
+    (when (good-line? line)
+      (let [line-key (if (= :a (:player g)) :a-lines :b-lines)
+            updated-lines (conj (line-key g) line)]
+        (swap! game #(assoc % line-key updated-lines))
+        ))
     (reset! draw-line nil)
     ))
 
-(defn handle-move [event]
-  (.preventDefault event)
-  #_(.log js/console (.. event -target -width))
-  (let [point (eventXY event)]
-    ))
 
 (r/defc svg-dot < r/reactive [n x y fill]
   (let [p [x y]
@@ -459,8 +465,7 @@
               :id (str "[" x " " y "]")
               :key (str "[" x " " y "]")
               :on-click handle-tap
-              :on-touch-start handle-move
-              :on-touch-end handle-move
+              :on-touch-end handle-tap
               }]))
 
 (r/defc svg-grid < r/reactive [g]
