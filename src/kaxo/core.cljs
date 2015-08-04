@@ -28,16 +28,10 @@
 (def initial-state {:n 5
                     :player :a
                     :players 1
-                    :a-crosses #{[1 0]}
-                    :b-crosses #{[1 0]}
-                    :a-lines #{
-                             [[0 0] [1 1]]
-                             [[2 2] [1 3]]
-                             [[4 3] [1 0]]
-                             }
-                    :b-lines #{
-                             [[0 2] [1 2]]
-                             }
+                    :a-crosses #{}
+                    :b-crosses #{}
+                    :a-lines #{}
+                    :b-lines #{}
                     :draw-line nil
                     })
 
@@ -72,7 +66,10 @@
 (def unit 1)
 (def gap 36)
 (defn units [x] (* x unit))
+(defn stinu [x] (/ x unit)) ; inverse units
+
 (defn gaps [x] (* (units (+ x 0.5)) gap))
+(defn spag [x] (stinu (- (/ x gap) 0.5))) ; inverse gaps
 (def al-think-time 2000)
 
 ;;
@@ -121,12 +118,6 @@
     (if ((:b-lines g) line)
       (:b colours)
       (:none colours))))
-
-(defn dot-sep [n]
-  (Math.floor (/ 300 n)))
-
-(defn px [n len]
-  (str (* len (dot-sep n)) "px"))
 
 ;;
 ;; reset the game initially
@@ -190,19 +181,6 @@
         (timeout al-think-time #(->> newg
                                      (computer-turn)
                                      (claim-b-point b-crosses)))))))
-
-(defn handle-tap [event]
-  (let [p (reader/read-string (.. event -target -id))
-        g @game
-        a-crosses (:a-crosses g)
-        b-crosses (:b-crosses g)
-        pl (:player g)]
-    (do 
-      (.preventDefault event)
-      (if (= (:players g) 2)
-        (claim-point a-crosses b-crosses p pl)
-        (when (= pl :a)
-          (single-player-point g a-crosses b-crosses p))))))
 
 (defn change-players [count]
   (swap! game #(assoc % 
@@ -268,10 +246,12 @@
 
 (r/defc render-lines [g]
   (let [a-lines (:a-lines g)
-        b-lines (:b-lines g)]       
+        b-lines (:b-lines g)
+        draw-line (:draw-line g)]       
     [:g
      (map #(render-line g :a %) (vec a-lines))
      (map #(render-line g :b %) (vec b-lines))
+     (when draw-line (render-line g (:player g) draw-line))
      ]))
 
 (r/defc render-cross [g [x y :as point]]
@@ -290,15 +270,15 @@
 
 (defn touchXY [event]
   (let [touch (aget (.-changedTouches event) 0)
-        client [(.-clientX touch) (.-clientY touch)]]
-    #_(.log js/console (str " client " client))
-    client
+        page [(.-pageX touch) (.-pageY touch)]]
+    #_(.log js/console (str " page " page))
+    page
     ))
 
 (defn mouseXY [event]
-  (let [client [(.-clientX event) (.-clientY event)]]
-    #_(.log js/console (str " client " client))
-    client
+  (let [page [(.-pageX event) (.-pageY event)]]
+    #_(.log js/console (str " page " page))
+    page
 ))
 
 (defn eventXY [event]
@@ -306,12 +286,14 @@
        (= (subs (.-type event) 0 5) "touch") 
        (nil? (aget (.-touches event) 0) ))
     prn (.-type event))
-  (let [type (subs (.-type event) 0 5)]
-    (condp = type 
-      "mouse" (prn "mouse " (mouseXY event))
-      "touch" (prn "touch " (touchXY event))
-      (prn (str "other " (.-type event)))
-      ))
+  (let [type (subs (.-type event) 0 5)
+        result (condp = type 
+                 "mouse" ["mouse" (mouseXY event)]
+                 "touch" ["touch " (touchXY event)]
+                 [0 0]
+                 )]
+    (prn result)
+    (second result))
 )
 
 (defn svg-element-width [el]
@@ -335,62 +317,114 @@
         s (Math.sin theta)]
     (fn [[x y]] [(- (* x c) (* y s)) (+ (* x s) (* y c))])))
 
-(defn svg->mouse [svg-el]
-  (let [offset-top (.-offsetTop svg-el)
-        offset-left (.-offsetLeft svg-el)
+(defn svg-distances [svg-el]
+  (let [offset-left (.-offsetLeft svg-el)
+        offset-top (.-offsetTop svg-el)        
         offset-width (.-offsetWidth svg-el)
         view-box (.. svg-el -viewBox -animVal)
+        x (.-x view-box)
+        y (.-y view-box)
+        width (.-width view-box)
+        height (.-height view-box)
         ]
-    (prn (str offset-top " " offset-left " " offset-width))
-    (.log js/console view-box)
-    (comp (translate (- (.-x view-box)) (- (.-y view-box)))
-          (scale (/ offset-width (.-width view-box)))
-          (translate offset-left offset-top))))
+    [offset-left offset-top offset-width x y width height]))
 
-(defn mouse->svg [svg-el]
-  (let [offset-top (.-offsetTop svg-el)
-        offset-left (.-offsetLeft svg-el)
-        offset-width (.-offsetWidth svg-el)
-        view-box (.-viewBox svg-el)
-        ]
-    (comp (translate (- offset-left) (- offset-top))
-          (scale (/ (.-width view-box) offset-width))
-          (translate (.-x view-box) (.-y view-box)))))
+(defn viewport->mouse [svg-el]
+  (let [[offset-left offset-top offset-width x y width height] (svg-distances svg-el)]
+    (comp 
+     (translate offset-left offset-top)
+     (scale (/ offset-width width))
+     (translate (- x) (- y))
+     )))
+
+(defn mouse->viewport [svg-el]
+  (let [[offset-left offset-top offset-width x y width height] (svg-distances svg-el)]
+    (comp 
+     (translate x y)
+     (scale (/ width offset-width))
+     (translate (- offset-left) (- offset-top))
+     )))
 
 ;;;;;;;;
-#_(defn svg-scale [actual-width vp-width offset-top offset-left]
-  (fn [[x y] :as game-point] 
-    (let [scale  (/ actual-width vp-width)]
-      [(+ (* scale x) offset-left) (+ (* scale y) offset-top)] )))
 
-(defn svg-scale [actual-width vp-width]
-  (/ actual-width vp-width))
 
-(defn svg-inv-scale [actual-width vp-width]
-  (/ vp-width actual-width))
+(defn viewport->game [g]
+  (comp
+   (fn [[x y]] [(spag x) (spag y)])
+   (scale (/ (:n g) max-n ))
+))
 
-(defn svg-transform [g]
-  #(* % (/ max-n (:n g))))
+(defn game->viewport [g]
+  (comp
+   (scale (/ max-n (:n g))) 
+   (fn [[x y]] [(gaps x) (gaps y)])))
 
-(defn svg-inv-transform [g]
-  #(* % (/ (:n g) max-n)))
+(defn game->mouse [g svg-el]
+  (comp
+   (viewport->mouse svg-el)
+   (game->viewport g)
+   ))
 
-(defn g-transform [g]
-  ((svg-transform g) 
-     (svg-scale (svg-element-width (el "grid")) viewport-width)))
+(defn mouse->game [g svg-el]
+  (comp
+   (fn [[x y]] [(.round js/Math x) (.round js/Math y)])
+   (viewport->game g)
+   (mouse->viewport svg-el)))
 
-(defn g-inv-transform [g]
-  
-)
+(defn mouse->dot [g svg-el]
+  (comp
+   (fn [[x y]] [(.round js/Math x) (.round js/Math y)])
+   (mouse->game g svg-el)
+   ))
 
+(defn handle-tap [event]
+  (let [p (reader/read-string (.. event -target -id))
+        g @game
+        a-crosses (:a-crosses g)
+        b-crosses (:b-crosses g)
+        pl (:player g)]
+    (do 
+      (.preventDefault event)
+      (if (= (:players g) 2)
+        (claim-point a-crosses b-crosses p pl)
+        (when (= pl :a)
+          (single-player-point g a-crosses b-crosses p))))))
+
+
+(defn handle-start-line [event]
+  (let [pointer (eventXY event)
+        dot ((mouse->dot @game (el "grid")) pointer)]
+    (swap! game #(assoc % 
+                   :draw-line [dot dot]
+                   ))))
+
+(defn handle-move-line [event]
+  (let [pointer (eventXY event)
+        g @game
+        draw-line (:draw-line g)
+        game-pointer ((mouse->game g (el "grid")) pointer)]
+    (when draw-line
+      (prn "game-pointer " game-pointer)
+      (swap! game #(assoc % 
+                     :draw-line [(first draw-line) game-pointer]
+                     )))))
+
+(defn handle-end-line [event]
+  (let [pointer (eventXY event)
+        g @game
+        draw-line (:draw-line g)
+        dot ((mouse->dot g (el "grid")) pointer)
+        append-lines (if (= :a (:player g)) (:a-lines g) (:b-lines g))]
+    (swap! game #(assoc %
+                   (conj append-lines [(first draw-line) dot])
+                   :draw-line nil 
+                   ))))
 
 (defn handle-move [event]
   (.preventDefault event)
-  (.log js/console (.. event -target -width))
+  #_(.log js/console (.. event -target -width))
   (let [point (eventXY event)]
-    )
-  )
-
+    ))
 
 (r/defc svg-dot < r/reactive [n x y fill]
   (let [p [x y]
@@ -407,29 +441,33 @@
               :stroke-width (units  8)
               :id (str "[" x " " y "]")
               :key (str "[" x " " y "]")
-              :on-click handle-move
-              :on-mouse-down handle-move
+              :on-click handle-tap
               :on-touch-start handle-move
               :on-touch-end handle-move
               }]))
 
-
-
-
 (r/defc svg-grid < r/reactive [g]
-  [:span "hello there"
-   [:svg {:view-box (str "0 0 " viewport-width " " viewport-height) 
-          :height "80%"
-          :width "80%"
-          :key "b3"
-          :id "grid"
-          :on-mouse-move handle-move
-          :on-touch-start handle-move
-          :on-touch-end handle-move
-          :on-touch-move handle-move
-          :style {:display-mode "inline-block"}
-          }
-    (let [n (:n g)] 
+  [:svg {:view-box (str "0 0 " viewport-width " " viewport-height) 
+         :height "100%"
+         :width "100%"
+         :key "b3"
+         :id "grid"
+         :on-mouse-down handle-start-line
+         :on-mouse-move handle-move-line
+         :on-mouse-up handle-end-line
+         :on-touch-start handle-start-line
+         :on-touch-end handle-move-line
+         :on-touch-move handle-end-line
+         :style {:display-mode "inline-block"}
+         }
+   (let [n (:n g)]
+     [:g 
+      [:rect {:stroke "black" 
+              :stroke-width 1 
+              :fill "none" 
+              :x 0 :y 0 
+              :width viewport-width 
+              :height viewport-height}]
       [:g {:id "box" :transform (str "scale(" (* 1 (/ max-n n)) ")")}
        (for [x (range n)]
          (for [y (range n)]
@@ -439,7 +477,7 @@
              )
            ))
        (render-lines g)
-       ])]])
+       ]])])
 
 (r/defc debug-game < r/reactive [g]
   "heads up game state display"
