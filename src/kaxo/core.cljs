@@ -325,22 +325,24 @@
 ;; breakdown into individual transforms
 ;;
 (defn scale [factor]
-  (fn [[x y]] ([(* factor x)] [(* factor y)])))
+  (fn [[x y]] [(* factor x) (* factor y)]))
 
 (defn translate [offset-left offset-top]
-  (fn [[x y]] ([(+ offset-left x)] [(+ offset-top y)])))
+  (fn [[x y]] [(+ offset-left x) (+ offset-top y)]))
 
 (defn rotate [theta]
   (let [c (Math.cos theta)
         s (Math.sin theta)]
-    (fn [[x y]] ([(- (* x c) (* y s)) (+ (* x s) (* y c))]))))
+    (fn [[x y]] [(- (* x c) (* y s)) (+ (* x s) (* y c))])))
 
 (defn svg->mouse [svg-el]
   (let [offset-top (.-offsetTop svg-el)
         offset-left (.-offsetLeft svg-el)
         offset-width (.-offsetWidth svg-el)
-        view-box (.-viewBox svg-el)
+        view-box (.. svg-el -viewBox -animVal)
         ]
+    (prn (str offset-top " " offset-left " " offset-width))
+    (.log js/console view-box)
     (comp (translate (- (.-x view-box)) (- (.-y view-box)))
           (scale (/ offset-width (.-width view-box)))
           (translate offset-left offset-top))))
