@@ -292,7 +292,7 @@
                  "touch" ["touch " (touchXY event)]
                  [0 0]
                  )]
-    (prn result)
+    #_(prn result)
     (second result))
 )
 
@@ -367,7 +367,6 @@
 
 (defn mouse->game [g svg-el]
   (comp
-   (fn [[x y]] [(.round js/Math x) (.round js/Math y)])
    (viewport->game g)
    (mouse->viewport svg-el)))
 
@@ -404,7 +403,7 @@
         draw-line (:draw-line g)
         game-pointer ((mouse->game g (el "grid")) pointer)]
     (when draw-line
-      (prn "game-pointer " game-pointer)
+      #_(prn "game-pointer " game-pointer)
       (swap! game #(assoc % 
                      :draw-line [(first draw-line) game-pointer]
                      )))))
@@ -414,9 +413,10 @@
         g @game
         draw-line (:draw-line g)
         dot ((mouse->dot g (el "grid")) pointer)
-        append-lines (if (= :a (:player g)) (:a-lines g) (:b-lines g))]
+        line-selector (if (= :a (:player g)) :a-lines :b-lines)
+        updated-lines (conj (line-selector g) [(first draw-line) dot])]
     (swap! game #(assoc %
-                   (conj append-lines [(first draw-line) dot])
+                   line-selector updated-lines
                    :draw-line nil 
                    ))))
 
