@@ -424,13 +424,18 @@
       line
       [p2 p1])))
 
-(defn add-way-points [[[x1 y1] [x2 y2] :as [p1 p2]] gradient]
-  (if (= 0 gradient) 
+(defn add-way-points [[[x1 y1] [x2 y2] :as [p1 p2]] slope-type]
+  "Given a doubled line segment and a slope type,"
+  "find dots traversed by line."
+  "Include mid-points btween dots on diagonal lines"
+  "A zero slope-type means horizontal or vertical, else it means gradient"
+  "Only 0, -1, 1 slope-types are allowed"
+  (if (= 0 slope-type) 
     (if (= x1 x2) 
       (into #{} (for [y (range y1 (inc y2) 2)] [x1 y]))
       (into #{} (for [x (range x1 (inc x2) 2)] [x y1])))
     (into #{} (for [x (range x1 (inc x2) 1)]
-                [x (+ y1 (* (- x x1) gradient))]))
+                [x (+ y1 (* (- x x1) slope-type))]))
     )
 )
 
@@ -533,7 +538,6 @@
    [:p {:key "b2"} (str (r/react drag-line))]
    [:p {:key "b3"} (str (r/react w-points))]
 ])
-
 
 (r/defc tool-bar < r/reactive [g]
   (let [active (fn [g player-count]
