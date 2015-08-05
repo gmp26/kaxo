@@ -27,7 +27,7 @@
 
 (def initial-state {:n 5
                     :player :a
-                    :players 1
+                    :players 2
                     :a-crosses #{}
                     :b-crosses #{}
                     :a-lines #{}
@@ -35,7 +35,7 @@
                     })
 
 (defonce game (atom initial-state))
-(defonce draw-line (atom nil))
+(defonce drag-line (atom nil))
 (defonce w-points (atom #{}))
 
 (def messages {:yours "Your turn"
@@ -229,8 +229,8 @@
 
 (declare good-line?)
 
-(r/defc render-draw-line < r/reactive [g]
-  (let [[[x1 y1] [x2 y2] :as [p1 p2 :as line]] (r/react draw-line)]
+(r/defc render-drag-line < r/reactive [g]
+  (let [[[x1 y1] [x2 y2] :as [p1 p2 :as line]] (r/react drag-line)]
     ; we don't want to render a line before the mouse moves as
     ; it prevents mouseup/touchend detection on the dot 
     ; preventing clicks/taps there.
@@ -403,16 +403,16 @@
 (defn handle-start-line [event]
   (let [pointer (eventXY event)
         dot ((mouse->dot @game (el "grid")) pointer)]
-    (reset! draw-line [dot dot])
+    (reset! drag-line [dot dot])
 ))
 
 (defn handle-move-line [event]
   (let [pointer (eventXY event)
         g @game
-        dl @draw-line
-        game-pointer ((mouse->game g (el "grid")) pointer)]
+        [drag-start _ :as dl] @drag-line
+        drag-end ((mouse->game g (el "grid")) pointer)]
     (when dl
-      (reset! draw-line [(first dl) game-pointer])
+      (reset! drag-line [drag-start drag-end])
 )))
 
 (defn canonical-line [[p1 p2 :as line]]
@@ -425,20 +425,21 @@
       [p2 p1])))
 
 (defn add-way-points [[[x1 y1] [x2 y2] :as [p1 p2]] gradient]
-  (let [wps (if (= 0 gradient) 
-              #{p1 p2}
-              (into #{} (for [x (range x1 (inc x2) 1)]
-                          [x (+ y1 (* x gradient))]))
-              )]
-)
+  (if (= 0 gradient) 
+    (if (= x1 x2) 
+      (into #{} (for [y (range y1 (inc y2) 2)] [x1 y]))
+      (into #{} (for [x (range x1 (inc x2) 2)] [x y1])))
+    (into #{} (for [x (range x1 (inc x2) 1)]
+                [x (+ y1 (* (- x x1) gradient))]))
+    )
 )
 
 (defn new-way-points [[[x1 y1] [x2 y2] :as [p1 p2]]]
   "way-points that a line crosses or nil for bad gradient or a point-line"
   (if (= p1 p2)
     nil
-    (let [dx (- x1 x2)
-          dy (- y1 y2)
+    (let [dx (- x2 x1)
+          dy (- y2 y1)
           ; scale w-points by 2 to avoid fractional float comparisons
           doubled [[(* 2 x1) (* 2 y1)] [(* 2 x2) (* 2 y2)]]
           ]
@@ -450,29 +451,25 @@
        :else nil
        ))))
 
-;;
-;; TODO: Chnage good-slope? to new-way-points and connect up
-;; way-point tests
-;;
-
-
 (defn handle-end-line [event]
   (let [pointer (eventXY event)
         g @game
-        draw-start (first @draw-line)
+        draw-start (first @drag-line)
         dot ((mouse->dot g (el "grid")) pointer)
         line (canonical-line [draw-start dot])
         old-wps @w-points
         new-wps (new-way-points line) 
         ]
+    (prn "end-line " new-wps line)
     (when new-wps
+      (prn "new-wps" new-wps)
       (when (not-any? new-wps old-wps)
         (let [line-key (if (= :a (:player g)) :a-lines :b-lines)
               updated-lines (conj (line-key g) line)]
           (swap! game #(assoc % line-key updated-lines))
           (reset! w-points (union old-wps new-wps))
           )))
-    (reset! draw-line nil)
+    (reset! drag-line nil)
     ))
 
 
@@ -526,15 +523,16 @@
              )
            ))
        (render-lines g)
-       (render-draw-line g)
+       (render-drag-line g)
        ]])])
 
 (r/defc debug-game < r/reactive [g]
   "heads up game state display"
   [:div
    [:p {:key "b1"} (str (dissoc g :squares))]
-   [:p {:key "b2"} (str (r/react draw-line))]])
-
+   [:p {:key "b2"} (str (r/react drag-line))]
+   [:p {:key "b3"} (str (r/react w-points))]
+])
 
 
 (r/defc tool-bar < r/reactive [g]
@@ -582,32 +580,6 @@
                :color "#888"
                }}
    "Last player able to move wins"])
-
-(defn random-dark-colour []
-  (let [dark #(+ 100 (rand-int 70))]
-    (str "rgb(" (dark) "," (dark) "," (dark) ")"))) 
-
-(def dark-rgb (random-dark-colour))
-
-#_(r/defc goal [g]
-  (let [n (:n g)]
-    [:p {:style {
-                 :text-align "center"
-                 :font-size 24
-                 :color "#fff"
-                 :padding "5px"
-                 :background-color dark-rgb 
-                 }}
-     (condp = n
-         3 "Can blue lose?"
-         4 "Can blue lose in 4 moves?"
-         5 "Can blue always win?"
-         6 "Can blue force a draw?"
-         7 "Can blue always lose?"
-         8 "Can blue always win?"
-         9 "Can blue always win on an inifinite board?"
-         )
-     ]))
 
 (r/defc game-container  < r/reactive []
   (let [g (r/react game)]
