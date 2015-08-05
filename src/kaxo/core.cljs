@@ -32,11 +32,11 @@
                     :b-crosses #{}
                     :a-lines #{}
                     :b-lines #{}
-                    ;:draw-line nil
                     })
 
 (defonce game (atom initial-state))
 (defonce draw-line (atom nil))
+(defonce w-points (atom #{}))
 
 (def messages {:yours "Your turn"
                :als   "My turn"
@@ -123,7 +123,8 @@
                    :b-crosses #{}
                    :a-lines #{}
                    :b-lines #{}
-                   :n n)))
+                   :n n))
+  (reset! w-points #{}))
 
 (defn up-tap [event]
   "grow the game by 1 unit up to a max-n square"
@@ -144,10 +145,17 @@
     ))
 
 (defn claim-a-point [cross point]
-  (swap! game #(assoc % :player :b :a-crosses (conj cross point))))
+  (swap! game #(assoc % :player :b :a-crosses (conj cross point)))
+  ;
+  ; Should we make a w-point here too?
+  ;
+)
 
 (defn claim-b-point [cross point]
-  (swap! game #(assoc % :player :a :b-crosses (conj cross point))))
+  (swap! game #(assoc % :player :a :b-crosses (conj cross point)))  ;
+  ; Should we make a w-point here too?
+  ;
+)
 
 (defn claim-point [a-crosses b-crosses point player]
   (if (and (not (a-crosses point)) (not (b-crosses point)))
@@ -183,7 +191,8 @@
                  :b-crosses #{} 
                  :a-lines #{} 
                  :b-lines #{} 
-                 )))
+                 ))
+  (reset! w-points #{}))
 
 (defn one-player [event]
   (.preventDefault event)
@@ -200,7 +209,8 @@
                          :b-crosses #{}
                          :a-lines #{}
                          :b-lines #{}
-                         )))
+                         ))
+   (reset! w-points #{}))
   ([event] 
    (.preventDefault event) 
    (reset-game))
@@ -215,14 +225,6 @@
 ;;
 (declare get-status)
 (declare get-fill)
-
-(defn line-data [[p1 p2]]
-  "Line path data"
-  (let [p2s #(str (gaps (first %)) " " (gaps (second %)))]
-    (str "M " (p2s p1)
-         " L " (p2s p2))) 
-  )
-
 
 
 (declare good-line?)
@@ -421,17 +423,41 @@
     line
     [p2 p1]))
 
-(defn good-slope? [[p1 p2]]
-  "Points that a line crosses"
-  (let [dx (- (first p1) (first p2))
-        dy (- (second p1) (second p2))
-        ]
-    (or (= 0 dx) (= 0 dy) (= dx dy) (= dx (- dy))))
+(defn add-way-points [[[x1 y1] [x2 y2] :as [p1 p2]] gradient]
+  (let [wps (if (= 0 gradient) 
+              #{p1 p2}
+              (into #{} (for [x (range x1 (inc x2) 1)]
+                          [x (+ y1 (* x gradient))]))
+              )]
+    (if (some wps )))
+  
 )
+
+(defn new-way-points [[[x1 y1] [x2 y2] :as [p1 p2]]]
+  "Points that a line crosses"
+  (let [dx (- x1 x2)
+        dy (- y1 y2)
+        ; scale w-points by 2 to avoid fractional float comparisons
+        doubled [[(* 2 x1) (* 2 y1)] [(* 2 x2) (* 2 y2)]]
+        ]
+    (cond
+     (= 0 dx) (add-way-points doubled 0)
+     (= 0 dy) (add-way-points doubled 0)
+     (= dx dy) (add-way-points doubled 1)
+     (= dx (- dy)) (add-way-points doubled -1)
+     :else nil
+     )))
+
+;;
+;; TODO: Chnage good-slope? to new-way-points and connect up
+;; way-point tests
+;;
 
 (defn good-line? [[p1 p2 :as line]]
   (and (not= p1 p2) (good-slope? line))
   )
+
+
 
 (defn handle-end-line [event]
   (let [pointer (eventXY event)
