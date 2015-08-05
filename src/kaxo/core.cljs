@@ -2,7 +2,7 @@
     (:require [game.gestures :refer [bind-touch] :as gest] 
               [rum :as r]
               [cljs.reader :as reader]
-              [clojure.set :refer (intersection)]
+              [clojure.set :refer (union)]
               [cljsjs.react]
               ))
 
@@ -416,12 +416,13 @@
 )))
 
 (defn canonical-line [[p1 p2 :as line]]
-  (if (or (< (first p1) (first p2))
-          (and (= (first p1) (first p2))
-               (< (second p1) (second p2)))
-          )
-    line
-    [p2 p1]))
+  (let [[[x1 y1] [x2 y2]] [p1 p2]] 
+    (if (or (< x1 x2)
+            (and (= x1 x2)
+                 (< y1 y2))
+            )
+      line
+      [p2 p1])))
 
 (defn add-way-points [[[x1 y1] [x2 y2] :as [p1 p2]] gradient]
   (let [wps (if (= 0 gradient) 
@@ -429,34 +430,30 @@
               (into #{} (for [x (range x1 (inc x2) 1)]
                           [x (+ y1 (* x gradient))]))
               )]
-    (if (some wps )))
-  
+)
 )
 
 (defn new-way-points [[[x1 y1] [x2 y2] :as [p1 p2]]]
-  "Points that a line crosses"
-  (let [dx (- x1 x2)
-        dy (- y1 y2)
-        ; scale w-points by 2 to avoid fractional float comparisons
-        doubled [[(* 2 x1) (* 2 y1)] [(* 2 x2) (* 2 y2)]]
-        ]
-    (cond
-     (= 0 dx) (add-way-points doubled 0)
-     (= 0 dy) (add-way-points doubled 0)
-     (= dx dy) (add-way-points doubled 1)
-     (= dx (- dy)) (add-way-points doubled -1)
-     :else nil
-     )))
+  "way-points that a line crosses or nil for bad gradient or a point-line"
+  (if (= p1 p2)
+    nil
+    (let [dx (- x1 x2)
+          dy (- y1 y2)
+          ; scale w-points by 2 to avoid fractional float comparisons
+          doubled [[(* 2 x1) (* 2 y1)] [(* 2 x2) (* 2 y2)]]
+          ]
+      (cond
+       (= 0 dx) (add-way-points doubled 0)
+       (= 0 dy) (add-way-points doubled 0)
+       (= dx dy) (add-way-points doubled 1)
+       (= dx (- dy)) (add-way-points doubled -1)
+       :else nil
+       ))))
 
 ;;
 ;; TODO: Chnage good-slope? to new-way-points and connect up
 ;; way-point tests
 ;;
-
-(defn good-line? [[p1 p2 :as line]]
-  (and (not= p1 p2) (good-slope? line))
-  )
-
 
 
 (defn handle-end-line [event]
@@ -465,12 +462,16 @@
         draw-start (first @draw-line)
         dot ((mouse->dot g (el "grid")) pointer)
         line (canonical-line [draw-start dot])
+        old-wps @w-points
+        new-wps (new-way-points line) 
         ]
-    (when (good-line? line)
-      (let [line-key (if (= :a (:player g)) :a-lines :b-lines)
-            updated-lines (conj (line-key g) line)]
-        (swap! game #(assoc % line-key updated-lines))
-        ))
+    (when new-wps
+      (when (not-any? new-wps old-wps)
+        (let [line-key (if (= :a (:player g)) :a-lines :b-lines)
+              updated-lines (conj (line-key g) line)]
+          (swap! game #(assoc % line-key updated-lines))
+          (reset! w-points (union old-wps new-wps))
+          )))
     (reset! draw-line nil)
     ))
 
