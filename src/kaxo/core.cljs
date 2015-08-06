@@ -23,8 +23,6 @@
 ;;
 ;; state constants
 ;;
-(prn "-- Restart --")
-
 (def initial-state {:n 5
                     :player :a
                     :players 2
@@ -93,24 +91,6 @@
   #_(prn "play computer turn")
   (get-ai-move :b)
 )
-
-;;;;;;;;;;;;;;;;;;;;;
-;;
-;; Rendering
-;;
-(defn cross-colour [g point]
-  (if ((:a-crosses g) point) 
-    (:a colours)
-    (if ((:b-crosses g) point)
-      (:b colours)
-      (:none colours))))
-
-(defn line-colour [g line]
-  (if ((:a-lines g) line) 
-    (:a colours)
-    (if ((:b-lines g) line)
-      (:b colours)
-      (:none colours))))
 
 ;;
 ;; reset the game initially
@@ -229,6 +209,22 @@
 
 (declare good-line?)
 
+(defn cross-colour [g point]
+  (if ((:a-crosses g) point) 
+    (:a colours)
+    (if ((:b-crosses g) point)
+      (:b colours)
+      (:none colours))))
+
+(defn line-colour [g line]
+  (if ((:a-lines g) line) 
+    (:a colours)
+    (if ((:b-lines g) line)
+      (:b colours)
+      (:none colours))))
+
+
+
 (r/defc render-drag-line < r/reactive [g]
   (let [[[x1 y1] [x2 y2] :as [p1 p2 :as line]] (r/react drag-line)]
     ; we don't want to render a line before the mouse moves as
@@ -239,6 +235,7 @@
               :opacity 0.5
               :stroke ((:player g) colours)
               :stroke-width 3
+              :style {:cursor "crosshair"}
               :x1 (gaps x1)
               :y1 (gaps y1)
               :x2 (gaps x2)
@@ -320,6 +317,8 @@
 (defn scale [factor]
   (fn [[x y]] [(* factor x) (* factor y)]))
 
+(def doubler (scale 2))
+
 (defn translate [offset-left offset-top]
   (fn [[x y]] [(+ offset-left x) (+ offset-top y)]))
 
@@ -394,19 +393,23 @@
         b-crosses (:b-crosses g)
         pl (:player g)]
     (do 
+      (prn (str "p = " p " eventXY " (eventXY event)) )
       (.preventDefault event)
       (if (= (:players g) 2)
-        (claim-point a-crosses b-crosses p pl)
+        (when (not (@w-points (doubler p)))
+          (claim-point a-crosses b-crosses p pl))
         (when (= pl :a)
           (single-player-point g a-crosses b-crosses p))))))
 
 (defn handle-start-line [event]
+  (.preventDefault event)
   (let [pointer (eventXY event)
         dot ((mouse->dot @game (el "grid")) pointer)]
     (reset! drag-line [dot dot])
 ))
 
 (defn handle-move-line [event]
+  (.preventDefault event)
   (let [pointer (eventXY event)
         g @game
         [drag-start _ :as dl] @drag-line
@@ -446,7 +449,7 @@
     (let [dx (- x2 x1)
           dy (- y2 y1)
           ; scale w-points by 2 to avoid fractional float comparisons
-          doubled [[(* 2 x1) (* 2 y1)] [(* 2 x2) (* 2 y2)]]
+          doubled [(doubler p1) (doubler p2)]
           ]
       (cond
        (= 0 dx) (add-way-points doubled 0)
@@ -456,7 +459,9 @@
        :else nil
        ))))
 
+
 (defn handle-end-line [event]
+  (.preventDefault event)  
   (let [pointer (eventXY event)
         g @game
         draw-start (first @drag-line)
@@ -470,8 +475,11 @@
       (prn "new-wps" new-wps)
       (when (not-any? new-wps old-wps)
         (let [line-key (if (= :a (:player g)) :a-lines :b-lines)
-              updated-lines (conj (line-key g) line)]
-          (swap! game #(assoc % line-key updated-lines))
+              updated-lines (conj (line-key g) line)
+              new-player (if (= (:player g) :a) :b :a)]
+          (swap! game #(assoc % 
+                         line-key updated-lines
+                         :player new-player))
           (reset! w-points (union old-wps new-wps))
           )))
     (reset! drag-line nil)
@@ -534,7 +542,7 @@
 (r/defc debug-game < r/reactive [g]
   "heads up game state display"
   [:div
-   [:p {:key "b1"} (str (dissoc g :squares))]
+   [:p {:key "b1"} (str g)]
    [:p {:key "b2"} (str (r/react drag-line))]
    [:p {:key "b3"} (str (r/react w-points))]
 ])
@@ -542,14 +550,13 @@
 (r/defc tool-bar < r/reactive [g]
   (let [active (fn [g player-count]
                  (if (= player-count (:players g)) "active" ""))]
-
     [:div
      [:div {:class "btn-group toolbar"}
       [:button {:type "button" :class "btn btn-warning" :key "bu1" :on-click down-tap :on-touch-end down-tap} 
        [:span {:class "fa fa-chevron-down"}]]
       [:button {:type "button" :class "btn btn-warning" :key "bu2" :on-click up-tap :on-touch-end up-tap} 
        [:span {:class "fa fa-chevron-up"}]]
-      [:button {:type "button" :class (str "btn btn-default " (active g 1)) :key "bu4" :on-click one-player :on-touch-end one-player} "1 player"]
+      [:button {:type "button" :class (str "btn btn-default " (active g 1)) :key "bu4" :disabled "true" :on-click one-player :on-touch-end one-player} "1 player"]
       [:button {:type "button" :class (str "btn btn-default " (active g 2)) :key "bu5" :on-click two-player :on-touch-end two-player} "2 player"]
       [:button {:type "button" :class "btn btn-danger" :key "bu3" :on-click reset-game :on-touch-end reset-game} 
        [:span {:class "fa fa-refresh"}]]]]))
@@ -583,13 +590,13 @@
                :font-size 24
                :color "#888"
                }}
-   "Last player able to move wins"])
+   "Last player able to move loses"])
 
 (r/defc game-container  < r/reactive []
   (let [g (r/react game)]
     [:section
      [:div {:class "full-width"}
-      [:h1 "Kaxo!"]
+      [:h1 "Game Name"]
       (tool-bar g)
       (status-bar g)]
      (svg-grid g)
