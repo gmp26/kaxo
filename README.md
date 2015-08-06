@@ -41,7 +41,7 @@ get live reloading, nor a REPL.
 
 ## Other dependencies
 
-The project uses ReactJS to provide a fast virtual DOM, and the Reagent flavour
+The project uses ReactJS to provide a fast virtual DOM, together with the Reagent flavour
 of [tonsky/rum](https://github.com/tonsky/rum) to drive React. To create an initial fresh, empty figwheel/Rum/ReactJS project I used [this Leiningen template](https://github.com/gmp26/fwrum).
 
 ## License

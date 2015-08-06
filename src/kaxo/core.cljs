@@ -319,6 +319,8 @@
 
 (def doubler (scale 2))
 
+(defn doub [[x y]] [(* 2 x) (* 2 y)])
+
 (defn translate [offset-left offset-top]
   (fn [[x y]] [(+ offset-left x) (+ offset-top y)]))
 
@@ -391,13 +393,16 @@
         g @game
         a-crosses (:a-crosses g)
         b-crosses (:b-crosses g)
-        pl (:player g)]
+        pl (:player g)
+        dp (doub p)
+        new-w-points (union @w-points #{dp})]
     (do 
-      (prn (str "p = " p " eventXY " (eventXY event)) )
       (.preventDefault event)
       (if (= (:players g) 2)
-        (when (not (@w-points (doubler p)))
-          (claim-point a-crosses b-crosses p pl))
+        (when (not (@w-points dp))
+          (do
+            (reset! w-points new-w-points)
+            (claim-point a-crosses b-crosses p pl)))
         (when (= pl :a)
           (single-player-point g a-crosses b-crosses p))))))
 
@@ -490,20 +495,23 @@
   (let [p [x y]
         g (r/react game)
         the-class #(if ((:a-crosses g) p)  "dot claimed" "dot")
+        ;new-w-points (union #{(doubler p)} @w-points)
         ]
-    [:circle {
-              :class (the-class)
-              :cx (gaps x) 
-              :cy (gaps y)
-              :r (units 8)
-              :fill fill
-              :stroke "#cceecc"
-              :stroke-width (units  8)
-              :id (str "[" x " " y "]")
-              :key (str "[" x " " y "]")
-              :on-click handle-tap
-              :on-touch-end handle-tap
-              }]))
+    (do
+      ;(reset! w-points new-w-points)
+      [:circle {
+                :class (the-class)
+                :cx (gaps x) 
+                :cy (gaps y)
+                :r (units 8)
+                :fill fill
+                :stroke "#cceecc"
+                :stroke-width (units  8)
+                :id (str "[" x " " y "]")
+                :key (str "[" x " " y "]")
+                :on-click handle-tap
+                :on-touch-end handle-tap
+                }])))
 
 (r/defc svg-grid < r/reactive [g]
   [:svg {:view-box (str "0 0 " viewport-width " " viewport-height) 
@@ -520,24 +528,17 @@
          :style {:display-mode "inline-block"}
          }
    (let [n (:n g)]
-     [:g 
-      [:rect {:stroke "black" 
-              :stroke-width 1 
-              :fill "none" 
-              :x 0 :y 0 
-              :width viewport-width 
-              :height viewport-height}]
-      [:g {:id "box" :transform (str "scale(" (* 1 (/ max-n n)) ")")}
-       (for [x (range n)]
-         (for [y (range n)]
-           (if (or ((:a-crosses g) [x y]) ((:b-crosses g) [x y]))
-             (render-cross g [x y])                
-             (svg-dot n x y (cross-colour g [x y])) 
-             )
-           ))
-       (render-lines g)
-       (render-drag-line g)
-       ]])])
+     [:g {:id "box" :transform (str "scale(" (* 1 (/ max-n n)) ")")}
+      (for [x (range n)]
+        (for [y (range n)]
+          (if (or ((:a-crosses g) [x y]) ((:b-crosses g) [x y]))
+            (render-cross g [x y])                
+            (svg-dot n x y (cross-colour g [x y])) 
+            )
+          ))
+      (render-lines g)
+      (render-drag-line g)
+      ])])
 
 (r/defc debug-game < r/reactive [g]
   "heads up game state display"
@@ -596,7 +597,7 @@
   (let [g (r/react game)]
     [:section
      [:div {:class "full-width"}
-      [:h1 "Game Name"]
+      [:h1 "Kaxo"]
       (tool-bar g)
       (status-bar g)]
      (svg-grid g)
