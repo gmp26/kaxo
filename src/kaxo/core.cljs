@@ -593,6 +593,17 @@
                }}
    "Last player able to move loses"])
 
+(r/defc game-over-modal < r/reactive [] 
+  [:div {:class "modal fade bs-example-modal-sm" 
+         :id "myModal" 
+         }
+   [:div {:class "modal-dialog modal-sm"}
+    [:div {:class "modal-content"}
+     [:h4 {:class "modal-title" :id "myModalLabel"} "Modal title"]
+     [:button {:type "button" :class "close"} "OK"]
+     [:div {:class "modal-body"}]
+     [:div {:class "modal-footer"}]]]])
+
 (r/defc game-container  < r/reactive []
   (let [g (r/react game)]
     [:section
@@ -602,6 +613,7 @@
       (status-bar g)]
      (svg-grid g)
      (rules)
+     (game-over-modal)
      #_(goal g)
      (debug-game g)]))
 
@@ -614,8 +626,6 @@
 
 (initialise)
 
-;;
-;; optionally do something on game reload
-;;
 (defn on-js-reload []
-  (swap! game update-in [:__figwheel_counter] inc))
+
+(swap! game update-in [:__figwheel_counter] inc))
