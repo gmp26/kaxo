@@ -33,17 +33,17 @@
                     })
 
 (defonce game (atom initial-state))
-(defonce drag-line (atom nil))
+(defonce drag-line (atom [nil 0]))
 (defonce w-points (atom #{}))
 
 (def messages {:yours "Your turn"
                :als   "My turn"
-               :as-turn "Player A's turn"
-               :bs-turn "Player B's turn"
+               :as-turn "Blue's turn"
+               :bs-turn "Red's turn"
                :you-win "Well done! You won"
                :al-win "Oops! You lost"
-               :a-win "Player A won"
-               :b-win "Player B won"
+               :a-win "Blue won!"
+               :b-win "Red won!"
                :draw  "It's a draw!"
                })
 
@@ -83,7 +83,19 @@
 ;;
 (defn game-drawn? [g] false)
 
-(defn game-over? [g] false)
+(defn removed-points [wps]
+  (filter (fn [[x y]] (even? (* 2 x)) (even? (* 2 y))) wps))
+
+(defn game-over? [g wps] 
+  "return :a :b or false" 
+  (let [n (:n g) 
+        r-max (* n n) 
+        r-count (inc (count (removed-points wps)))]
+    (cond 
+     (< r-max r-count) (if (= (:player g) :a) :b :a)
+     (= r-max r-count) (:player g)
+     :else false)
+    ))
 
 (defn get-ai-move [player] nil)
 
@@ -153,12 +165,12 @@
   "Call f, optionally with arguments xs, after ms milliseconds"
   (js/setTimeout #(apply f xs) ms))
 
-(defn single-player-point [g a-crosses b-crosses point] 
+(defn single-player-point [g wps a-crosses b-crosses point] 
   (do
-    (when (not (or (game-over? g) (game-drawn? g)))
+    (when (not (or (game-over? g wps) (game-drawn? g)))
       (claim-a-point a-crosses point))
     (let [newg @game]
-      (when (not (or (game-over? newg) (game-drawn? newg)))
+      (when (not (or (game-over? newg wps) (game-drawn? newg)))
         (timeout al-think-time #(->> newg
                                      (computer-turn)
                                      (claim-b-point b-crosses)))))))
@@ -223,18 +235,15 @@
       (:b colours)
       (:none colours))))
 
-
-
 (r/defc render-drag-line < r/reactive [g]
-  (let [[[x1 y1] [x2 y2] :as [p1 p2 :as line]] (r/react drag-line)]
+  (let [[[[x1 y1] [x2 y2] :as [p1 p2 :as line]] _] (r/react drag-line)]
     ; we don't want to render a line before the mouse moves as
     ; it prevents mouseup/touchend detection on the dot 
     ; preventing clicks/taps there.
     (when (not= p1 p2)
       [:line {:stroke-linecap "round"
-              :opacity 0.5
               :stroke ((:player g) colours)
-              :stroke-width 3
+              :stroke-width 7
               :style {:cursor "crosshair"}
               :x1 (gaps x1)
               :y1 (gaps y1)
@@ -244,9 +253,8 @@
 
 (r/defc render-line [g player [[x1 y1] [x2 y2] :as line]]
   [:line {:stroke-linecap "round"
-          :opacity 0.5
           :stroke (line-colour g line)
-          :stroke-width 3
+          :stroke-width 7
           :x1 (gaps x1)
           :y1 (gaps y1)
           :x2 (gaps x2)
@@ -317,9 +325,9 @@
 (defn scale [factor]
   (fn [[x y]] [(* factor x) (* factor y)]))
 
-(def doubler (scale 2))
+#_(def doubler (scale 2))
 
-(defn doub [[x y]] [(* 2 x) (* 2 y)])
+#_(defn doub [[x y]] [(* 2 x) (* 2 y)])
 
 (defn translate [offset-left offset-top]
   (fn [[x y]] [(+ offset-left x) (+ offset-top y)]))
@@ -394,33 +402,33 @@
         a-crosses (:a-crosses g)
         b-crosses (:b-crosses g)
         pl (:player g)
-        dp (doub p)
-        new-w-points (union @w-points #{dp})]
+        ;dp (doub p)
+        new-w-points (union @w-points #{p})]
     (do 
       (.preventDefault event)
       (if (= (:players g) 2)
-        (when (not (@w-points dp))
+        (when (not (@w-points p))
           (do
             (reset! w-points new-w-points)
             (claim-point a-crosses b-crosses p pl)))
         (when (= pl :a)
-          (single-player-point g a-crosses b-crosses p))))))
+          (single-player-point g @w-points a-crosses b-crosses p))))))
 
 (defn handle-start-line [event]
   (.preventDefault event)
   (let [pointer (eventXY event)
         dot ((mouse->dot @game (el "grid")) pointer)]
-    (reset! drag-line [dot dot])
+    (reset! drag-line [[dot dot] (.now js/Date)])
 ))
 
 (defn handle-move-line [event]
   (.preventDefault event)
   (let [pointer (eventXY event)
         g @game
-        [drag-start _ :as dl] @drag-line
+        [[drag-start _ :as dl] started-at] @drag-line
         drag-end ((mouse->game g (el "grid")) pointer)]
     (when dl
-      (reset! drag-line [drag-start drag-end])
+      (reset! drag-line [[drag-start drag-end] started-at])
 )))
 
 (defn canonical-line [[p1 p2 :as line]]
@@ -433,34 +441,34 @@
       [p2 p1])))
 
 (defn add-way-points [[[x1 y1] [x2 y2] :as [p1 p2]] slope-type]
-  "Given a doubled line segment and a slope type,"
+  ;"Given a doubled line segment and a slope type,"
   "find dots traversed by line."
   "Include mid-points btween dots on diagonal lines"
   "A zero slope-type means horizontal or vertical, else it means gradient"
   "Only 0, -1, 1 slope-types are allowed"
   (if (= 0 slope-type) 
     (if (= x1 x2) 
-      (into #{} (for [y (range y1 (inc y2) 2)] [x1 y]))
-      (into #{} (for [x (range x1 (inc x2) 2)] [x y1])))
-    (into #{} (for [x (range x1 (inc x2) 1)]
+      (into #{} (for [y (range y1 (inc y2) 1)] [x1 y]))
+      (into #{} (for [x (range x1 (inc x2) 1)] [x y1])))
+    (into #{} (for [x (range x1 (+ x2 0.4) 0.5)]
                 [x (+ y1 (* (- x x1) slope-type))]))
     )
 )
 
-(defn new-way-points [[[x1 y1] [x2 y2] :as [p1 p2]]]
+(defn new-way-points [[[x1 y1] [x2 y2] :as [p1 p2 :as p]]]
   "way-points that a line crosses or nil for bad gradient or a point-line"
   (if (= p1 p2)
     nil
     (let [dx (- x2 x1)
           dy (- y2 y1)
           ; scale w-points by 2 to avoid fractional float comparisons
-          doubled [(doubler p1) (doubler p2)]
+          ; doubled [(doubler p1) (doubler p2)]
           ]
       (cond
-       (= 0 dx) (add-way-points doubled 0)
-       (= 0 dy) (add-way-points doubled 0)
-       (= dx dy) (add-way-points doubled 1)
-       (= dx (- dy)) (add-way-points doubled -1)
+       (= 0 dx) (add-way-points p 0) ;doubled
+       (= 0 dy) (add-way-points p 0) 
+       (= dx dy) (add-way-points p 1)
+       (= dx (- dy)) (add-way-points p -1)
        :else nil
        ))))
 
@@ -469,25 +477,27 @@
   (.preventDefault event)  
   (let [pointer (eventXY event)
         g @game
-        draw-start (first @drag-line)
+        [[draw-start _] started-at] @drag-line
+        now (.now js/Date)
+        is-tap (< (- now started-at) 333)
         dot ((mouse->dot g (el "grid")) pointer)
         line (canonical-line [draw-start dot])
         old-wps @w-points
         new-wps (new-way-points line) 
         ]
-    (prn "end-line " new-wps line)
-    (when new-wps
-      (prn "new-wps" new-wps)
-      (when (not-any? new-wps old-wps)
-        (let [line-key (if (= :a (:player g)) :a-lines :b-lines)
-              updated-lines (conj (line-key g) line)
-              new-player (if (= (:player g) :a) :b :a)]
-          (swap! game #(assoc % 
-                         line-key updated-lines
-                         :player new-player))
-          (reset! w-points (union old-wps new-wps))
-          )))
-    (reset! drag-line nil)
+    (if is-tap
+      (handle-tap event)
+      (when new-wps
+        (when (not-any? new-wps old-wps)
+          (let [line-key (if (= :a (:player g)) :a-lines :b-lines)
+                updated-lines (conj (line-key g) line)
+                new-player (if (= (:player g) :a) :b :a)]
+            (swap! game #(assoc % 
+                           line-key updated-lines
+                           :player new-player))
+            (reset! w-points (union old-wps new-wps))
+            ))))
+    (reset! drag-line [nil 0])
     ))
 
 
@@ -495,10 +505,8 @@
   (let [p [x y]
         g (r/react game)
         the-class #(if ((:a-crosses g) p)  "dot claimed" "dot")
-        ;new-w-points (union #{(doubler p)} @w-points)
         ]
     (do
-      ;(reset! w-points new-w-points)
       [:circle {
                 :class (the-class)
                 :cx (gaps x) 
@@ -532,8 +540,9 @@
       (for [x (range n)]
         (for [y (range n)]
           (if (or ((:a-crosses g) [x y]) ((:b-crosses g) [x y]))
-            (render-cross g [x y])                
-            (svg-dot n x y (cross-colour g [x y])) 
+            (render-cross g [x y])
+            (if (not ((r/react w-points) [x y]))
+              (svg-dot n x y (cross-colour g [x y]))) 
             )
           ))
       (render-lines g)
@@ -562,9 +571,9 @@
       [:button {:type "button" :class "btn btn-danger" :key "bu3" :on-click reset-game :on-touch-end reset-game} 
        [:span {:class "fa fa-refresh"}]]]]))
 
-(defn get-status [g]
+(defn get-status [g wps]
   (let [pa (= (:player g) :a)
-        gover (game-over? g)]
+        gover (game-over? g wps)]
     (if (game-drawn? g)
       :draw
       (if (= (:players g) 1)
@@ -581,8 +590,8 @@
 (defn get-fill [status]
   ((status message-colours) colours))
 
-(r/defc status-bar < r/reactive [g]
-  (let [status (get-status g)]
+(r/defc status-bar < r/reactive [g wps]
+  (let [status (get-status g wps)]
     [:p {:class "status" :style {:background-color (get-fill status)} :key "b4"} (get-message status)]))
 
 (r/defc rules []
@@ -591,30 +600,36 @@
                :font-size 24
                :color "#888"
                }}
-   "Last player able to move loses"])
+   "Last player able to move wins"])
 
 (r/defc game-over-modal < r/reactive [] 
-  [:div {:class "modal fade bs-example-modal-sm" 
-         :id "myModal" 
-         }
-   [:div {:class "modal-dialog modal-sm"}
-    [:div {:class "modal-content"}
-     [:h4 {:class "modal-title" :id "myModalLabel"} "Modal title"]
-     [:button {:type "button" :class "close"} "OK"]
-     [:div {:class "modal-body"}]
-     [:div {:class "modal-footer"}]]]])
+  [:div {:class "modal-container"}
+   [:div {:class "game-over-modal" :id "game-over" }
+    [:h1 "Game Over"]
+    [:p :style "" "Red won"]
+    [:div {:class "modal-body"}]
+    [:button {:type "button " :class (str "btn btn-lg btn-primary ")} "OK"]
+    ]])
+
+(defn open-modal [event]
+  (.preventDefault event)
+  (.log js/console (.-modal (el "myModal")))
+  (.modal (el "myModal") 'show')
+  )
 
 (r/defc game-container  < r/reactive []
-  (let [g (r/react game)]
-    [:section
+  (let [g (r/react game)
+        wps (r/react w-points)]
+    [:section {:id "game-container"}
+     #_(game-over-modal)
      [:div {:class "full-width"}
-      [:h1 "Kaxo"]
+      [:h1 {:style {:color "white"}} "Kaxo"]
       (tool-bar g)
-      (status-bar g)]
+      (status-bar g wps)]
      (svg-grid g)
      (rules)
-     (game-over-modal)
      #_(goal g)
+;     [:button {:type "button" :on-click open-modal} "show-modal"]
      (debug-game g)]))
 
 (defn initialise []
@@ -629,3 +644,4 @@
 (defn on-js-reload []
 
 (swap! game update-in [:__figwheel_counter] inc))
+
