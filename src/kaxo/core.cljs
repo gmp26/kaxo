@@ -573,16 +573,19 @@
 
 (defn get-status [g wps]
   (let [pa (= (:player g) :a)
-        gover (game-over? g wps)]
+        gover (game-over? g wps)
+        over-class (if gover " pulsed" "")]
     (if (game-drawn? g)
       :draw
       (if (= (:players g) 1)
-        (if gover
-          (if pa :al-win :you-win)
-          (if pa :yours :als))
-        (if gover
-          (if pa :b-win :a-win)
-          (if pa :as-turn :bs-turn))))))
+        [over-class (cond 
+                     (= gover :a) :al-win
+                     (= gover :b) :you-win
+                     :else (if pa :yours :als))]
+        [over-class (cond
+                     (= gover :a) :b-win
+                     (= gover :a) :a-win
+                     :else (if pa :as-turn :bs-turn))]))))
 
 (defn get-message [status]
   (status messages))
@@ -590,9 +593,11 @@
 (defn get-fill [status]
   ((status message-colours) colours))
 
+
+
 (r/defc status-bar < r/reactive [g wps]
-  (let [status (get-status g wps)]
-    [:p {:class "status" :style {:background-color (get-fill status)} :key "b4"} (get-message status)]))
+  (let [[over-class status] (get-status g wps)]
+    [:p {:class (str "status " over-class) :style {:background-color (get-fill status)} :key "b4"} (get-message status)]))
 
 (r/defc rules []
   [:p {:style {
