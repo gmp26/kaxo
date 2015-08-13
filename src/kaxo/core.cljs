@@ -241,14 +241,15 @@
     ; it prevents mouseup/touchend detection on the dot 
     ; preventing clicks/taps there.
     (when (not= p1 p2)
-      [:line {:stroke-linecap "round"
-              :stroke ((:player g) colours)
-              :stroke-width 7
-              :style {:cursor "crosshair"}
-              :x1 (gaps x1)
-              :y1 (gaps y1)
-              :x2 (gaps x2)
-              :y2 (gaps y2)}]))
+      (do
+        [:line {:stroke-linecap "round"
+                :stroke ((:player g) colours)
+                :stroke-width 7
+                :style {:cursor "crosshair"}
+                :x1 (gaps x1)
+                :y1 (gaps y1)
+                :x2 (gaps x2)
+                :y2 (gaps y2)}])))
   )
 
 (r/defc render-line [g player [[x1 y1] [x2 y2] :as line]]
@@ -284,58 +285,8 @@
              :fill "none"}
             ]]))
 
-(defn touchXY [event]
-  (let [touch (aget (.-changedTouches event) 0)
-        page [(.-pageX touch) (.-pageY touch)]]
-    #_(.log js/console (str " page " page))
-    page
-    ))
-
-(defn mouseXY [event]
-  (let [page [(.-pageX event) (.-pageY event)]]
-    #_(.log js/console (str " page " page))
-    page
-))
-
-(defn eventXY [event]
-  (if (and 
-       (= (subs (.-type event) 0 5) "touch") 
-       (nil? (aget (.-touches event) 0) ))
-    prn (.-type event))
-  (let [type (subs (.-type event) 0 5)
-        result (condp = type 
-                 "mouse" ["mouse" (mouseXY event)]
-                 "touch" ["touch " (touchXY event)]
-                 [0 0]
-                 )]
-    #_(prn result)
-    (second result))
-)
-
-(defn svg-element-width [el]
-  (.. el -width -baseVal -value))
-
-(defn svg-element-height [el]
-  (.. el -height -baseVal -value))
-
-;;;;
-;;
-;; breakdown into individual transforms
-;;
 (defn scale [factor]
   (fn [[x y]] [(* factor x) (* factor y)]))
-
-#_(def doubler (scale 2))
-
-#_(defn doub [[x y]] [(* 2 x) (* 2 y)])
-
-(defn translate [offset-left offset-top]
-  (fn [[x y]] [(+ offset-left x) (+ offset-top y)]))
-
-(defn rotate [theta]
-  (let [c (Math.cos theta)
-        s (Math.sin theta)]
-    (fn [[x y]] [(- (* x c) (* y s)) (+ (* x s) (* y c))])))
 
 (defn svg-distances [svg-el]
   (let [offset-left (.-offsetLeft svg-el)
@@ -349,51 +300,31 @@
         ]
     [offset-left offset-top offset-width x y width height]))
 
-(defn viewport->mouse [svg-el]
-  (let [[offset-left offset-top offset-width x y width height] (svg-distances svg-el)]
-    (comp 
-     (translate offset-left offset-top)
-     (scale (/ offset-width width))
-     (translate (- x) (- y))
-     )))
+(def svg-point (atom false))
 
-(defn mouse->viewport [svg-el]
-  (let [[offset-left offset-top offset-width x y width height] (svg-distances svg-el)]
-    (comp 
-     (translate x y)
-     (scale (/ width offset-width))
-     (translate (- offset-left) (- offset-top))
-     )))
+(defn mouse->svg [event]
+  (let [svg (el "grid")
+        pt (if @svg-point
+             @svg-point
+             (do
+               (reset! svg-point (.createSVGPoint svg))
+               @svg-point))
+        matrix (.inverse (.getScreenCTM svg))]
+    (do
+      (set! (.-x pt) (.-clientX event))
+      (set! (.-y pt) (.-clientY event))
+      ;(.log js/console (str  "x,y=" (.-x pt) (.-y pt)))
+      (reset! svg-point (.matrixTransform pt matrix))
+      [(.-x @svg-point) (.-y @svg-point)])
+))
 
-;;;;;;;;
+(defn game->dot [[x y]]
+  [(.round js/Math x) (.round js/Math y)])
 
-
-(defn viewport->game [g]
+(defn svg->game [g]
   (comp
    (fn [[x y]] [(spag x) (spag y)])
    (scale (/ (:n g) max-n ))
-))
-
-(defn game->viewport [g]
-  (comp
-   (scale (/ max-n (:n g))) 
-   (fn [[x y]] [(gaps x) (gaps y)])))
-
-(defn game->mouse [g svg-el]
-  (comp
-   (viewport->mouse svg-el)
-   (game->viewport g)
-   ))
-
-(defn mouse->game [g svg-el]
-  (comp
-   (viewport->game g)
-   (mouse->viewport svg-el)))
-
-(defn mouse->dot [g svg-el]
-  (comp
-   (fn [[x y]] [(.round js/Math x) (.round js/Math y)])
-   (mouse->game g svg-el)
    ))
 
 (defn handle-tap [event]
@@ -402,7 +333,6 @@
         a-crosses (:a-crosses g)
         b-crosses (:b-crosses g)
         pl (:player g)
-        ;dp (doub p)
         new-w-points (union @w-points #{p})]
     (do 
       (.preventDefault event)
@@ -416,17 +346,18 @@
 
 (defn handle-start-line [event]
   (.preventDefault event)
-  (let [pointer (eventXY event)
-        dot ((mouse->dot @game (el "grid")) pointer)]
+  (let [svg (mouse->svg event)
+        dot (game->dot ((svg->game @game) svg))
+        ]
     (reset! drag-line [[dot dot] (.now js/Date)])
 ))
 
 (defn handle-move-line [event]
   (.preventDefault event)
-  (let [pointer (eventXY event)
+  (let [svg (mouse->svg event)
         g @game
         [[drag-start _ :as dl] started-at] @drag-line
-        drag-end ((mouse->game g (el "grid")) pointer)]
+        drag-end ((svg->game g) svg)]
     (when dl
       (reset! drag-line [[drag-start drag-end] started-at])
 )))
@@ -475,12 +406,12 @@
 
 (defn handle-end-line [event]
   (.preventDefault event)  
-  (let [pointer (eventXY event)
+  (let [svg (mouse->svg event)
         g @game
         [[draw-start _] started-at] @drag-line
         now (.now js/Date)
         is-tap (< (- now started-at) 333)
-        dot ((mouse->dot g (el "grid")) pointer)
+        dot (game->dot ((svg->game g) svg))
         line (canonical-line [draw-start dot])
         old-wps @w-points
         new-wps (new-way-points line) 
@@ -551,7 +482,7 @@
 
 (r/defc debug-game < r/reactive [g]
   "heads up game state display"
-  [:div
+  [:div {:class "debug"}
    [:p {:key "b1"} (str g)]
    [:p {:key "b2"} (str (r/react drag-line))]
    [:p {:key "b3"} (str (r/react w-points))]
@@ -603,7 +534,7 @@
   [:p {:style {
                :text-align "center"
                :font-size 24
-               :color "#888"
+               :color "#f0ad4e"
                }}
    "Last player able to move wins"])
 
