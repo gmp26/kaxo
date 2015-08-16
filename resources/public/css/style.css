@@ -100,7 +100,7 @@ body {
 
 @-webkit-keyframes pulse {
   from {
-      font-size: 1.4em;
+      font-size: 2em;
       opacity: 0.75;
   }
   50% {
@@ -108,22 +108,22 @@ body {
       opacity: 1.0;
   }
   to {
-    font-size: 1.4em;
+    font-size: 2em;
     opacity: 0.75;
   }
 }
 
 @keyframes pulse {
   from {
-      font-size: 1.4em;
+      font-size: 1.6em;
       opacity: 0.75;
   }
   50% {
-      font-size: 1.2em;
+      font-size: 2em;
       opacity: 1.0;
   }
   to {
-    font-size: 1.4em;
+    font-size: 1.6em;
     opacity: 0.75;
   }
 }

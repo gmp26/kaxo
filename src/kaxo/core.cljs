@@ -23,7 +23,7 @@
 ;; state constants
 ;;
 
-(def initial-state {:n 9
+(def initial-state {:n 4
                     :player :a
                     :players 2
                     :a-crosses #{}
@@ -112,10 +112,11 @@
 
 (def viewport-width 320)
 (def viewport-height 320)
+(def scale-n 9)
 (def max-n 5)
 (def min-n 3)
 (def unit 1)
-(def gap 36)
+(def gap 35)
 (defn units [x] (* x unit))
 (defn stinu [x] (/ x unit)) ; inverse units
 
@@ -172,7 +173,7 @@
   (reset-history!))
 
 (defn up-tap [event]
-  "grow the game by 1 unit up to a max-n square"
+  "grow the game by 1 unit up to a 5 x 5 square"
   (.stopPropagation event)
   (.preventDefault event)
   (let [old-n (:n @game)
@@ -369,7 +370,7 @@
 (defn svg->game [g]
   (comp
    (fn [[x y]] [(spag x) (spag y)])
-   (scale (/ (:n g) max-n ))
+   (scale (/ (:n g) scale-n ))
    ))
 
 (defn handle-tap [event]
@@ -511,7 +512,7 @@
          :style {:display-mode "inline-block"}
          }
    (let [n (:n g)]
-     [:g {:id "box" :transform (str "scale(" (* 1 (/ max-n n)) ")")}
+     [:g {:id "box" :transform (str "scale(" (* 1 (/ scale-n n)) ")")}
       (for [x (range n)]
         (for [y (range n)]
           (if (or ((:a-crosses g) [x y]) ((:b-crosses g) [x y]))
@@ -547,8 +548,7 @@
        [:span {:class "fa fa-undo"}]]
       [:button {:type "button" :class "btn btn-info" :key "bu6" :on-click redo :on-touch-end redo}
        [:span {:class "fa fa-repeat"}]]
-      [:button {:type "button" :class "btn btn-danger" :key "bu7" :on-click reset-game :on-touch-end reset-game}
-       [:span {:class "fa fa-refresh"}]]]]))
+      ]]))
 
 (defn get-status [g wps]
   (let [pa (= (:player g) :a)
@@ -563,7 +563,7 @@
                      :else (if pa :yours :als))]
         [over-class (cond
                      (= gover :a) :b-win
-                     (= gover :a) :a-win
+                     (= gover :b) :a-win
                      :else (if pa :as-turn :bs-turn))]))))
 
 (defn get-message [status]
@@ -576,15 +576,31 @@
 
 (r/defc status-bar < r/reactive [g wps]
   (let [[over-class status] (get-status g wps)]
-    [:p {:class (str "status " over-class) :style {:background-color (get-fill status)} :key "b4"} (get-message status)]))
+    [:div
+     [:p {:class (str "status " over-class) :style {:background-color (get-fill status)} :key "b4"} (get-message status)
+      [:button {:type "button" :class "btn btn-danger" :style {:display "inline" :clear "none" :float "right"} :key "bu7" :on-click reset-game :on-touch-end reset-game}
+       [:span {:class "fa fa-refresh"}]]]]))
 
 (r/defc rules []
-  [:p {:style {
-               :text-align "center"
-               :font-size 24
-               :color "#f0ad4e"
-               }}
-   "Last player able to move wins"])
+  [:section {:style {:text-align "center"}}
+   [:p {:style {
+                :text-align "center"
+                :font-size 18
+                :color "#ffffff"
+                }}
+    "Last player able to move loses"]
+   [:p {:style {:color "#ffffff"
+                :font-size "14px"
+                :padding "0px"
+                }}
+    "Click or drag a line horizontally, vertically or at 45 degrees to cross out dots. Lines must not cross."]
+   [:p {:style {:color "#ffffff"
+                :font-size "12px"
+                :font-style "italic"
+                :padding-bottom "5px"
+                }}
+    "Kaxo is ©Alex Voak 2015. Used with permission."]
+   ])
 
 (r/defc game-over-modal < r/reactive []
   [:div {:class "modal-container"}
@@ -599,15 +615,14 @@
   (let [g (r/react game)
         wps (r/react w-points)]
     [:section {:id "game-container"}
-     #_(game-over-modal)
      [:div {:class "full-width"}
-      [:h1 {:style {:color "white"}} "Kaxo"]
+      [:p {:style {:color "white" :font-size "1.8em" :padding-top "8px"}} "Kaxo"]
       (tool-bar g)
       (status-bar g wps)]
      (svg-grid g)
      (rules)
      #_(goal g)
-     (debug-game g)]))
+     #_(debug-game g)]))
 
 (defn initialise []
   (.initializeTouchEvents js/React true)
