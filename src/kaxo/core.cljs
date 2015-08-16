@@ -540,9 +540,12 @@
                  (if (= player-count (:players g)) "active" ""))]
     [:div
      [:div {:class "btn-group toolbar"}
-      [:button {:type "button" :class "btn btn-success" :key "bu1" :on-click down-tap :on-touch-end down-tap}
+      [:button {:type "button"
+                :class (str "btn btn-success " (if (> (:n g) min-n) "" "disabled"))
+                :key "bu1" :on-click down-tap :on-touch-end down-tap}
        [:span {:class "fa fa-chevron-down"}]]
-      [:button {:type "button" :class "btn btn-success" :key "bu2" :on-click up-tap :on-touch-end up-tap}
+      [:button {:type "button"
+                :class (str "btn btn-success " (if (< (:n g) max-n) "" "disabled")) :key "bu2" :on-click up-tap :on-touch-end up-tap}
        [:span {:class "fa fa-chevron-up"}]]
       [:button {:type "button" :class (str "btn btn-default " (active g 1)) :key "bu3" :disabled "true" :on-click one-player :on-touch-end one-player} "1 player"]
       [:button {:type "button" :class (str "btn btn-default " (active g 2)) :key "bu4" :on-click two-player :on-touch-end two-player} "2 player"]
