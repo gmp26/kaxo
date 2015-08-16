@@ -374,22 +374,24 @@
    ))
 
 (defn handle-tap [event]
-  (let [p (reader/read-string (.. event -target -id))
+  (let [;p (reader/read-string (.. event -target -id))
         g @game
+        svg (mouse->svg event)
+        dot (game->dot ((svg->game @game) svg))
         a-crosses (:a-crosses g)
         b-crosses (:b-crosses g)
         pl (:player g)
-        new-w-points (union @w-points #{p})]
+        new-w-points (union @w-points #{dot})]
     (do
       (.preventDefault event)
       (if (= (:players g) 2)
-        (when (not (@w-points p))
+        (when (not (@w-points dot))
           (do
             (reset! w-points new-w-points)
-            (claim-point a-crosses b-crosses p pl)
+            (claim-point a-crosses b-crosses dot pl)
             ))
         (when (= pl :a)
-          (single-player-point g @w-points a-crosses b-crosses p)))
+          (single-player-point g @w-points a-crosses b-crosses dot)))
       (push-history! @game @w-points))))
 
 (defn handle-start-line [event]
@@ -507,8 +509,8 @@
          :on-mouse-move handle-move-line
          :on-mouse-up handle-end-line
          :on-touch-start handle-start-line
-         :on-touch-end handle-move-line
-         :on-touch-move handle-end-line
+         :on-touch-move handle-move-line
+         :on-touch-end handle-end-line
          :style {:display-mode "inline-block"}
          }
    (let [n (:n g)]
@@ -597,7 +599,6 @@
    [:p {:style {:color "#ffffff"
                 :font-size "12px"
                 :font-style "italic"
-                :padding-bottom "5px"
                 }}
     "Kaxo is ©Alex Voak 2015. Used with permission."]
    ])
