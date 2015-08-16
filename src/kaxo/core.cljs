@@ -1,5 +1,5 @@
 (ns ^:figwheel-always kaxo.core
-    (:require [game.gestures :refer [bind-touch] :as gest] 
+    (:require [game.gestures :refer [bind-touch] :as gest]
               [rum :as r]
               [cljs.reader :as reader]
               [clojure.set :refer (union)]
@@ -8,8 +8,7 @@
 
 (enable-console-print!)
 
-(defn deb 
-  ([x] 
+(defn deb ([x]
    "print value as identity for debug use"
    (prn x) x)
   ([s x]
@@ -23,6 +22,7 @@
 ;;
 ;; state constants
 ;;
+
 (def initial-state {:n 5
                     :player :a
                     :players 2
@@ -32,9 +32,62 @@
                     :b-lines #{}
                     })
 
+(def initial-history [0 [[initial-state #{}]]])
+
 (defonce game (atom initial-state))
 (defonce drag-line (atom [nil 0]))
 (defonce w-points (atom #{}))
+(defonce history (atom initial-history))
+
+(defn reset-history!
+  "reset history to start a new game"
+  []
+  (reset! history initial-history)
+  )
+
+
+(defn push-history!
+  "record game state in history. Do this after a new game move"
+  [g wps]
+  (let [[n log] @history]
+    (prn (str "history " n " -> " (inc n)))
+    (reset! history [(inc n) (conj log [g wps])])))
+
+(defn undo!
+  "restore state of the previous move if it exists"
+  []
+  (let [[n log] @history
+        last-n (if (> n 0) (- n 1) 0)
+        state (nth log last-n)]
+    (reset! history [last-n log])
+    (prn "first log")
+    (prn (first  state))
+    (reset! game (first state))
+    (reset! w-points (last state))))
+
+(defn redo!
+  "restore state of the next move if it exists"
+  []
+  (let [[n log] @history
+        next-n (if (< (inc n) (count log)) (inc n) n)
+        state (nth log next-n)]
+    (reset! history [next-n log])
+    (reset! game (first state))
+    (reset! w-points (last state))
+    )
+  )
+
+(defn undo
+  "undo button handler"
+  [_]
+  (undo!)
+  )
+
+(defn redo
+  "redo button handler"
+  [_]
+  (redo!)
+  )
 
 (def messages {:yours "Your turn"
                :als   "My turn"
@@ -86,12 +139,12 @@
 (defn removed-points [wps]
   (filter (fn [[x y]] (even? (* 2 x)) (even? (* 2 y))) wps))
 
-(defn game-over? [g wps] 
-  "return :a :b or false" 
-  (let [n (:n g) 
-        r-max (* n n) 
+(defn game-over? [g wps]
+  "return :a :b or false"
+  (let [n (:n g)
+        r-max (* n n)
         r-count (inc (count (removed-points wps)))]
-    (cond 
+    (cond
      (< r-max r-count) (if (= (:player g) :a) :b :a)
      (= r-max r-count) (:player g)
      :else false)
@@ -110,13 +163,14 @@
 (declare reset-game)
 
 (defn resize-game-board!! [n]
-  (swap! game #(assoc % 
+  (swap! game #(assoc %
                    :a-crosses #{}
                    :b-crosses #{}
                    :a-lines #{}
                    :b-lines #{}
                    :n n))
-  (reset! w-points #{}))
+  (reset! w-points #{})
+  (reset-history!))
 
 (defn up-tap [event]
   "grow the game by 1 unit up to a max-n square"
@@ -161,12 +215,15 @@
 ;; events
 ;;
 
+
 (defn timeout [ms f & xs]
   "Call f, optionally with arguments xs, after ms milliseconds"
   (js/setTimeout #(apply f xs) ms))
 
-(defn single-player-point [g wps a-crosses b-crosses point] 
+(defn single-player-point [g wps a-crosses b-crosses point]
   (do
+    ;todo
+    (swap! history #(conj % [g wps]))
     (when (not (or (game-over? g wps) (game-drawn? g)))
       (claim-a-point a-crosses point))
     (let [newg @game]
@@ -176,13 +233,13 @@
                                      (claim-b-point b-crosses)))))))
 
 (defn change-players [count]
-  (swap! game #(assoc % 
-                 :players count 
-                 :player :a 
-                 :a-crosses #{} 
-                 :b-crosses #{} 
-                 :a-lines #{} 
-                 :b-lines #{} 
+  (swap! game #(assoc %
+                 :players count
+                 :player :a
+                 :a-crosses #{}
+                 :b-crosses #{}
+                 :a-lines #{}
+                 :b-lines #{}
                  ))
   (reset! w-points #{}))
 
@@ -194,7 +251,7 @@
   (.preventDefault event)
   (change-players 2))
 
-(defn reset-game 
+(defn reset-game
   ([]
    (swap! game #(assoc % :player :a
                          :a-crosses #{}
@@ -202,9 +259,10 @@
                          :a-lines #{}
                          :b-lines #{}
                          ))
-   (reset! w-points #{}))
-  ([event] 
-   (.preventDefault event) 
+   (reset! w-points #{})
+   (reset-history!))
+  ([event]
+   (.preventDefault event)
    (reset-game))
   ([event _]
    (reset-game event)))
@@ -222,14 +280,14 @@
 (declare good-line?)
 
 (defn cross-colour [g point]
-  (if ((:a-crosses g) point) 
+  (if ((:a-crosses g) point)
     (:a colours)
     (if ((:b-crosses g) point)
       (:b colours)
       (:none colours))))
 
 (defn line-colour [g line]
-  (if ((:a-lines g) line) 
+  (if ((:a-lines g) line)
     (:a colours)
     (if ((:b-lines g) line)
       (:b colours)
@@ -238,7 +296,7 @@
 (r/defc render-drag-line < r/reactive [g]
   (let [[[[x1 y1] [x2 y2] :as [p1 p2 :as line]] _] (r/react drag-line)]
     ; we don't want to render a line before the mouse moves as
-    ; it prevents mouseup/touchend detection on the dot 
+    ; it prevents mouseup/touchend detection on the dot
     ; preventing clicks/taps there.
     (when (not= p1 p2)
       (do
@@ -265,7 +323,7 @@
 (r/defc render-lines [g]
   (let [a-lines (:a-lines g)
         b-lines (:b-lines g)
-        ]       
+        ]
     [:g
      (map #(render-line g :a %) (vec a-lines))
      (map #(render-line g :b %) (vec b-lines))
@@ -277,7 +335,7 @@
         m #(cmd " M" %1 %2)
         l #(cmd " L" %1 %2)
         ]
-    [:g {:transform (str "translate(" (- (gaps x) a) "," (- (gaps y) a) ")")} 
+    [:g {:transform (str "translate(" (- (gaps x) a) "," (- (gaps y) a) ")")}
      [:path {:d (str (m (- a) (- a)) (l a a) (m (- a) a) (l a (- a)))
              :stroke-width (str a)
              :opacity 1.0
@@ -287,18 +345,6 @@
 
 (defn scale [factor]
   (fn [[x y]] [(* factor x) (* factor y)]))
-
-(defn svg-distances [svg-el]
-  (let [offset-left (.-offsetLeft svg-el)
-        offset-top (.-offsetTop svg-el)        
-        offset-width (.-offsetWidth svg-el)
-        view-box (.. svg-el -viewBox -animVal)
-        x (.-x view-box)
-        y (.-y view-box)
-        width (.-width view-box)
-        height (.-height view-box)
-        ]
-    [offset-left offset-top offset-width x y width height]))
 
 (def svg-point (atom false))
 
@@ -334,15 +380,17 @@
         b-crosses (:b-crosses g)
         pl (:player g)
         new-w-points (union @w-points #{p})]
-    (do 
+    (do
       (.preventDefault event)
       (if (= (:players g) 2)
         (when (not (@w-points p))
           (do
             (reset! w-points new-w-points)
-            (claim-point a-crosses b-crosses p pl)))
+            (claim-point a-crosses b-crosses p pl)
+            ))
         (when (= pl :a)
-          (single-player-point g @w-points a-crosses b-crosses p))))))
+          (single-player-point g @w-points a-crosses b-crosses p)))
+      (push-history! @game @w-points))))
 
 (defn handle-start-line [event]
   (.preventDefault event)
@@ -363,7 +411,7 @@
 )))
 
 (defn canonical-line [[p1 p2 :as line]]
-  (let [[[x1 y1] [x2 y2]] [p1 p2]] 
+  (let [[[x1 y1] [x2 y2]] [p1 p2]]
     (if (or (< x1 x2)
             (and (= x1 x2)
                  (< y1 y2))
@@ -377,8 +425,8 @@
   "Include mid-points btween dots on diagonal lines"
   "A zero slope-type means horizontal or vertical, else it means gradient"
   "Only 0, -1, 1 slope-types are allowed"
-  (if (= 0 slope-type) 
-    (if (= x1 x2) 
+  (if (= 0 slope-type)
+    (if (= x1 x2)
       (into #{} (for [y (range y1 (inc y2) 1)] [x1 y]))
       (into #{} (for [x (range x1 (inc x2) 1)] [x y1])))
     (into #{} (for [x (range x1 (+ x2 0.4) 0.5)]
@@ -397,7 +445,7 @@
           ]
       (cond
        (= 0 dx) (add-way-points p 0) ;doubled
-       (= 0 dy) (add-way-points p 0) 
+       (= 0 dy) (add-way-points p 0)
        (= dx dy) (add-way-points p 1)
        (= dx (- dy)) (add-way-points p -1)
        :else nil
@@ -405,7 +453,7 @@
 
 
 (defn handle-end-line [event]
-  (.preventDefault event)  
+  (.preventDefault event)
   (let [svg (mouse->svg event)
         g @game
         [[draw-start _] started-at] @drag-line
@@ -414,20 +462,22 @@
         dot (game->dot ((svg->game g) svg))
         line (canonical-line [draw-start dot])
         old-wps @w-points
-        new-wps (new-way-points line) 
+        new-wps (new-way-points line)
         ]
     (if is-tap
       (handle-tap event)
-      (when new-wps
-        (when (not-any? new-wps old-wps)
-          (let [line-key (if (= :a (:player g)) :a-lines :b-lines)
-                updated-lines (conj (line-key g) line)
-                new-player (if (= (:player g) :a) :b :a)]
-            (swap! game #(assoc % 
-                           line-key updated-lines
-                           :player new-player))
-            (reset! w-points (union old-wps new-wps))
-            ))))
+      (do
+        (when new-wps
+          (when (not-any? new-wps old-wps)
+            (let [line-key (if (= :a (:player g)) :a-lines :b-lines)
+                  updated-lines (conj (line-key g) line)
+                  new-player (if (= (:player g) :a) :b :a)]
+              (swap! game #(assoc %
+                                  line-key updated-lines
+                                  :player new-player))
+              (reset! w-points (union old-wps new-wps))
+              )))
+        (push-history! @game @w-points)))
     (reset! drag-line [nil 0])
     ))
 
@@ -440,7 +490,7 @@
     (do
       [:circle {
                 :class (the-class)
-                :cx (gaps x) 
+                :cx (gaps x)
                 :cy (gaps y)
                 :r (units 8)
                 :fill fill
@@ -448,12 +498,10 @@
                 :stroke-width (units  8)
                 :id (str "[" x " " y "]")
                 :key (str "[" x " " y "]")
-                :on-click handle-tap
-                :on-touch-end handle-tap
                 }])))
 
 (r/defc svg-grid < r/reactive [g]
-  [:svg {:view-box (str "0 0 " viewport-width " " viewport-height) 
+  [:svg {:view-box (str "0 0 " viewport-width " " viewport-height)
          :height "100%"
          :width "100%"
          :key "b3"
@@ -473,7 +521,7 @@
           (if (or ((:a-crosses g) [x y]) ((:b-crosses g) [x y]))
             (render-cross g [x y])
             (if (not ((r/react w-points) [x y]))
-              (svg-dot n x y (cross-colour g [x y]))) 
+              (svg-dot n x y (cross-colour g [x y])))
             )
           ))
       (render-lines g)
@@ -493,13 +541,17 @@
                  (if (= player-count (:players g)) "active" ""))]
     [:div
      [:div {:class "btn-group toolbar"}
-      [:button {:type "button" :class "btn btn-warning" :key "bu1" :on-click down-tap :on-touch-end down-tap} 
+      [:button {:type "button" :class "btn btn-warning" :key "bu1" :on-click down-tap :on-touch-end down-tap}
        [:span {:class "fa fa-chevron-down"}]]
-      [:button {:type "button" :class "btn btn-warning" :key "bu2" :on-click up-tap :on-touch-end up-tap} 
+      [:button {:type "button" :class "btn btn-warning" :key "bu2" :on-click up-tap :on-touch-end up-tap}
        [:span {:class "fa fa-chevron-up"}]]
-      [:button {:type "button" :class (str "btn btn-default " (active g 1)) :key "bu4" :disabled "true" :on-click one-player :on-touch-end one-player} "1 player"]
-      [:button {:type "button" :class (str "btn btn-default " (active g 2)) :key "bu5" :on-click two-player :on-touch-end two-player} "2 player"]
-      [:button {:type "button" :class "btn btn-danger" :key "bu3" :on-click reset-game :on-touch-end reset-game} 
+      [:button {:type "button" :class (str "btn btn-default " (active g 1)) :key "bu3" :disabled "true" :on-click one-player :on-touch-end one-player} "1 player"]
+      [:button {:type "button" :class (str "btn btn-default " (active g 2)) :key "bu4" :on-click two-player :on-touch-end two-player} "2 player"]
+      [:button {:type "button" :class "btn btn-info" :key "bu5" :on-click undo :on-touch-end undo}
+       [:span {:class "fa fa-undo"}]]
+      [:button {:type "button" :class "btn btn-info" :key "bu6" :on-click redo :on-touch-end redo}
+       [:span {:class "fa fa-repeat"}]]
+      [:button {:type "button" :class "btn btn-danger" :key "bu7" :on-click reset-game :on-touch-end reset-game}
        [:span {:class "fa fa-refresh"}]]]]))
 
 (defn get-status [g wps]
@@ -509,7 +561,7 @@
     (if (game-drawn? g)
       :draw
       (if (= (:players g) 1)
-        [over-class (cond 
+        [over-class (cond
                      (= gover :a) :al-win
                      (= gover :b) :you-win
                      :else (if pa :yours :als))]
@@ -538,7 +590,7 @@
                }}
    "Last player able to move wins"])
 
-(r/defc game-over-modal < r/reactive [] 
+(r/defc game-over-modal < r/reactive []
   [:div {:class "modal-container"}
    [:div {:class "game-over-modal" :id "game-over" }
     [:h1 "Game Over"]
@@ -546,12 +598,6 @@
     [:div {:class "modal-body"}]
     [:button {:type "button " :class (str "btn btn-lg btn-primary ")} "OK"]
     ]])
-
-(defn open-modal [event]
-  (.preventDefault event)
-  (.log js/console (.-modal (el "myModal")))
-  (.modal (el "myModal") 'show')
-  )
 
 (r/defc game-container  < r/reactive []
   (let [g (r/react game)
@@ -565,7 +611,6 @@
      (svg-grid g)
      (rules)
      #_(goal g)
-;     [:button {:type "button" :on-click open-modal} "show-modal"]
      (debug-game g)]))
 
 (defn initialise []
@@ -580,4 +625,3 @@
 (defn on-js-reload []
 
 (swap! game update-in [:__figwheel_counter] inc))
-
