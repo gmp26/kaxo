@@ -1,5 +1,5 @@
 (ns ^:figwheel-always kaxo.core
-    (:require [game.gestures :refer [bind-touch] :as gest]
+    (:require
               [rum :as r]
               [cljs.reader :as reader]
               [clojure.set :refer (union)]
@@ -593,12 +593,15 @@
                 :font-size 18
                 :color "#ffffff"
                 }}
-    "Last player able to move loses"]
+    ;; "To win, avoid moving last"
+    ;; "Last player to move loses"
+    "Last player able to move loses"
+    ]
    [:p {:style {:color "#ffffff"
                 :font-size "14px"
                 :padding "0px"
                 }}
-    "Click or drag a line horizontally, vertically or at 45 degrees to cross out dots. Lines must not cross."]
+    "To cross out dots, click on them or drag a horizontal, vertical or 45° line through them. Lines must not cross."]
    [:p {:style {:color "#ffffff"
                 :font-size "12px"
                 :font-style "italic"
