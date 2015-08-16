@@ -23,7 +23,7 @@
 ;; state constants
 ;;
 
-(def initial-state {:n 5
+(def initial-state {:n 9
                     :player :a
                     :players 2
                     :a-crosses #{}
@@ -44,7 +44,6 @@
   []
   (reset! history initial-history)
   )
-
 
 (defn push-history!
   "record game state in history. Do this after a new game move"
@@ -113,7 +112,7 @@
 
 (def viewport-width 320)
 (def viewport-height 320)
-(def max-n 9)
+(def max-n 5)
 (def min-n 3)
 (def unit 1)
 (def gap 36)
@@ -439,12 +438,9 @@
   (if (= p1 p2)
     nil
     (let [dx (- x2 x1)
-          dy (- y2 y1)
-          ; scale w-points by 2 to avoid fractional float comparisons
-          ; doubled [(doubler p1) (doubler p2)]
-          ]
+          dy (- y2 y1)]
       (cond
-       (= 0 dx) (add-way-points p 0) ;doubled
+       (= 0 dx) (add-way-points p 0)
        (= 0 dy) (add-way-points p 0)
        (= dx dy) (add-way-points p 1)
        (= dx (- dy)) (add-way-points p -1)
@@ -541,9 +537,9 @@
                  (if (= player-count (:players g)) "active" ""))]
     [:div
      [:div {:class "btn-group toolbar"}
-      [:button {:type "button" :class "btn btn-warning" :key "bu1" :on-click down-tap :on-touch-end down-tap}
+      [:button {:type "button" :class "btn btn-success" :key "bu1" :on-click down-tap :on-touch-end down-tap}
        [:span {:class "fa fa-chevron-down"}]]
-      [:button {:type "button" :class "btn btn-warning" :key "bu2" :on-click up-tap :on-touch-end up-tap}
+      [:button {:type "button" :class "btn btn-success" :key "bu2" :on-click up-tap :on-touch-end up-tap}
        [:span {:class "fa fa-chevron-up"}]]
       [:button {:type "button" :class (str "btn btn-default " (active g 1)) :key "bu3" :disabled "true" :on-click one-player :on-touch-end one-player} "1 player"]
       [:button {:type "button" :class (str "btn btn-default " (active g 2)) :key "bu4" :on-click two-player :on-touch-end two-player} "2 player"]
