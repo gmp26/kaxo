@@ -1,5 +1,5 @@
 (ns ^:figwheel-always kaxo.core
-    (:require
+    (:require [game.gestures :refer [bind-touch] :as gest]
               [rum :as r]
               [cljs.reader :as reader]
               [clojure.set :refer (union)]
@@ -14,15 +14,11 @@
   ([s x]
    (prn (str s x)) x))
 
-;; define game state once so it doesn't re-initialise on reload
-
 (defn el [id] (.getElementById js/document id))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
+;;;
 ;; state constants
-;;
-
+;;;
 (def initial-state {:n 4
                     :player :a
                     :players 2
@@ -34,11 +30,18 @@
 
 (def initial-history [0 [[initial-state #{}]]])
 
+;;;
+;; define game state atoms once only so code is reloadable in figwheel
+;;;
 (defonce game (atom initial-state))
+(defonce svg-point (atom false))        ; will be created to calculate svg screen transform
 (defonce drag-line (atom [nil 0]))
 (defonce w-points (atom #{}))
 (defonce history (atom initial-history))
 
+;;;
+;; history for undo-redo handling
+;;;
 (defn reset-history!
   "reset history to start a new game"
   []
@@ -76,17 +79,25 @@
     )
   )
 
-(defn undo
-  "undo button handler"
-  [_]
-  (undo!)
-  )
+;;;
+;; reset game
+;;;
+(defn reset-game
+  ([]
+   (swap! game #(assoc % :player :a
+                         :a-crosses #{}
+                         :b-crosses #{}
+                         :a-lines #{}
+                         :b-lines #{}
+                         ))
+   (reset! w-points #{})
+   (reset-history!))
+  ([event]
+   (.preventDefault event)
+   (reset-game))
+  ([event _]
+   (reset-game event)))
 
-(defn redo
-  "redo button handler"
-  [_]
-  (redo!)
-  )
 
 (def messages {:yours "Your turn"
                :als   "My turn"
@@ -150,18 +161,31 @@
      :else false)
     ))
 
-(defn get-ai-move [player] nil)
+(defn get-status [g wps]
+  (let [pa (= (:player g) :a)
+        gover (game-over? g wps)
+        over-class (if gover " pulsed" "")]
+    (if (game-drawn? g)
+      :draw
+      (if (= (:players g) 1)
+        [over-class (cond
+                     (= gover :a) :al-win
+                     (= gover :b) :you-win
+                     :else (if pa :yours :als))]
+        [over-class (cond
+                     (= gover :a) :b-win
+                     (= gover :b) :a-win
+                     :else (if pa :as-turn :bs-turn))]))))
 
-(defn computer-turn [g]
-  #_(prn "play computer turn")
-  (get-ai-move :b)
-)
+(defn get-message [status]
+  (status messages))
+
+(defn get-fill [status]
+  ((status message-colours) colours))
 
 ;;
 ;; reset the game initially
 ;;
-(declare reset-game)
-
 (defn resize-game-board!! [n]
   (swap! game #(assoc %
                    :a-crosses #{}
@@ -190,32 +214,39 @@
     (resize-game-board!! new-n)
     ))
 
-(defn claim-a-point [cross point]
+;;;
+;;; game play
+;;;
+(defn get-ai-move [player] nil)
+
+(defn computer-turn [g]
+  (prn "play computer turn")
+  (get-ai-move :b)
+)
+
+(defn claim-a-point
+  [cross point]
+  "claim a point for player a"
   (swap! game #(assoc % :player :b :a-crosses (conj cross point)))
-  ;
-  ; Should we make a w-point here too?
-  ;
-)
+  )
 
-(defn claim-b-point [cross point]
+(defn claim-b-point
+  "claim a point for player b"
+  [cross point]
   (swap! game #(assoc % :player :a :b-crosses (conj cross point)))  ;
-  ; Should we make a w-point here too?
-  ;
-)
+  )
 
-(defn claim-point [a-crosses b-crosses point player]
+(defn claim-point
+  "claim a point for a player"
+  [a-crosses b-crosses point player]
   (if (and (not (a-crosses point)) (not (b-crosses point)))
     (if (= player :a)
       (claim-a-point a-crosses point)
       (claim-b-point b-crosses point))))
 
-(declare timeout)
-
-;;
-;; events
-;;
-
-
+;;;
+;;; events
+;;;
 (defn timeout [ms f & xs]
   "Call f, optionally with arguments xs, after ms milliseconds"
   (js/setTimeout #(apply f xs) ms))
@@ -251,104 +282,27 @@
   (.preventDefault event)
   (change-players 2))
 
-(defn reset-game
-  ([]
-   (swap! game #(assoc % :player :a
-                         :a-crosses #{}
-                         :b-crosses #{}
-                         :a-lines #{}
-                         :b-lines #{}
-                         ))
-   (reset! w-points #{})
-   (reset-history!))
-  ([event]
-   (.preventDefault event)
-   (reset-game))
-  ([event _]
-   (reset-game event)))
+(defn undo
+  "undo button handler"
+  [_]
+  (undo!)
+  )
+
+(defn redo
+  "redo button handler"
+  [_]
+  (redo!)
+  )
 
 (defn start-game [] (reset-game))
 
 
-;;
-;; rendering game board
-;;
-(declare get-status)
-(declare get-fill)
-
-
-(declare good-line?)
-
-(defn cross-colour [g point]
-  (if ((:a-crosses g) point)
-    (:a colours)
-    (if ((:b-crosses g) point)
-      (:b colours)
-      (:none colours))))
-
-(defn line-colour [g line]
-  (if ((:a-lines g) line)
-    (:a colours)
-    (if ((:b-lines g) line)
-      (:b colours)
-      (:none colours))))
-
-(r/defc render-drag-line < r/reactive [g]
-  (let [[[[x1 y1] [x2 y2] :as [p1 p2 :as line]] _] (r/react drag-line)]
-    ; we don't want to render a line before the mouse moves as
-    ; it prevents mouseup/touchend detection on the dot
-    ; preventing clicks/taps there.
-    (when (not= p1 p2)
-      (do
-        [:line {:stroke-linecap "round"
-                :stroke ((:player g) colours)
-                :stroke-width 7
-                :style {:cursor "crosshair"}
-                :x1 (gaps x1)
-                :y1 (gaps y1)
-                :x2 (gaps x2)
-                :y2 (gaps y2)}])))
-  )
-
-(r/defc render-line [g player [[x1 y1] [x2 y2] :as line]]
-  [:line {:stroke-linecap "round"
-          :stroke (line-colour g line)
-          :stroke-width 7
-          :x1 (gaps x1)
-          :y1 (gaps y1)
-          :x2 (gaps x2)
-          :y2 (gaps y2)}]
-  )
-
-(r/defc render-lines [g]
-  (let [a-lines (:a-lines g)
-        b-lines (:b-lines g)
-        ]
-    [:g
-     (map #(render-line g :a %) (vec a-lines))
-     (map #(render-line g :b %) (vec b-lines))
-     ]))
-
-(r/defc render-cross [g [x y :as point]]
-  (let [a 5
-        cmd (fn [c x y] (str c " " (+ a x) " " (+ a y)))
-        m #(cmd " M" %1 %2)
-        l #(cmd " L" %1 %2)
-        ]
-    [:g {:transform (str "translate(" (- (gaps x) a) "," (- (gaps y) a) ")")}
-     [:path {:d (str (m (- a) (- a)) (l a a) (m (- a) a) (l a (- a)))
-             :stroke-width (str a)
-             :opacity 1.0
-             :stroke (cross-colour g point)
-             :fill "none"}
-            ]]))
-
 (defn scale [factor]
   (fn [[x y]] [(* factor x) (* factor y)]))
 
-(def svg-point (atom false))
-
-(defn mouse->svg [event]
+(defn mouse->svg
+  "browser independent transform from mouse/touch coords to svg viewport"
+  [event]
   (let [svg (el "grid")
         pt (if @svg-point
              @svg-point
@@ -373,9 +327,13 @@
    (scale (/ (:n g) scale-n ))
    ))
 
+(defn mouse->dot
+  "find dot under mouse/touch point"
+  [event]
+  (game->dot ((svg->game @game) (mouse->svg event))))
+
 (defn handle-tap [event]
-  (let [;p (reader/read-string (.. event -target -id))
-        g @game
+  (let [g @game
         svg (mouse->svg event)
         dot (game->dot ((svg->game @game) svg))
         a-crosses (:a-crosses g)
@@ -480,7 +438,74 @@
     (reset! drag-line [nil 0])
     ))
 
+;;
+;; rendering game board
+;;
+(defn cross-colour [g point]
+  (if ((:a-crosses g) point)
+    (:a colours)
+    (if ((:b-crosses g) point)
+      (:b colours)
+      (:none colours))))
 
+(defn line-colour [g line]
+  (if ((:a-lines g) line)
+    (:a colours)
+    (if ((:b-lines g) line)
+      (:b colours)
+      (:none colours))))
+
+(r/defc render-drag-line < r/reactive [g]
+  (let [[[[x1 y1] [x2 y2] :as [p1 p2]]] (r/react drag-line)]
+    ; we don't want to render a line before the mouse moves as
+    ; it prevents mouseup/touchend detection on the dot
+    ; preventing clicks/taps there.
+    (when (not= p1 p2)
+      (do
+        [:line {:stroke-linecap "round"
+                :stroke ((:player g) colours)
+                :stroke-width 7
+                :style {:cursor "crosshair"}
+                :x1 (gaps x1)
+                :y1 (gaps y1)
+                :x2 (gaps x2)
+                :y2 (gaps y2)}]))))
+
+(r/defc render-line [g player [[x1 y1] [x2 y2] :as line]]
+  [:line {:stroke-linecap "round"
+          :stroke (line-colour g line)
+          :stroke-width 7
+          :x1 (gaps x1)
+          :y1 (gaps y1)
+          :x2 (gaps x2)
+          :y2 (gaps y2)}])
+
+(r/defc render-lines [g]
+  (let [a-lines (:a-lines g)
+        b-lines (:b-lines g)
+        ]
+    [:g
+     (map #(render-line g :a %) (vec a-lines))
+     (map #(render-line g :b %) (vec b-lines))
+     ]))
+
+(r/defc render-cross [g [x y :as point]]
+  (let [a 5
+        cmd (fn [c x y] (str c " " (+ a x) " " (+ a y)))
+        m #(cmd " M" %1 %2)
+        l #(cmd " L" %1 %2)
+        ]
+    [:g {:transform (str "translate(" (- (gaps x) a) "," (- (gaps y) a) ")")}
+     [:path {:d (str (m (- a) (- a)) (l a a) (m (- a) a) (l a (- a)))
+             :stroke-width (str a)
+             :opacity 1.0
+             :stroke (cross-colour g point)
+             :fill "none"}
+            ]]))
+
+;;;
+;; rendering
+;;;
 (r/defc svg-dot < r/reactive [n x y fill]
   (let [p [x y]
         g (r/react game)
@@ -555,30 +580,6 @@
        [:span {:class "fa fa-repeat"}]]
       ]]))
 
-(defn get-status [g wps]
-  (let [pa (= (:player g) :a)
-        gover (game-over? g wps)
-        over-class (if gover " pulsed" "")]
-    (if (game-drawn? g)
-      :draw
-      (if (= (:players g) 1)
-        [over-class (cond
-                     (= gover :a) :al-win
-                     (= gover :b) :you-win
-                     :else (if pa :yours :als))]
-        [over-class (cond
-                     (= gover :a) :b-win
-                     (= gover :b) :a-win
-                     :else (if pa :as-turn :bs-turn))]))))
-
-(defn get-message [status]
-  (status messages))
-
-(defn get-fill [status]
-  ((status message-colours) colours))
-
-
-
 (r/defc status-bar < r/reactive [g wps]
   (let [[over-class status] (get-status g wps)]
     [:div
@@ -593,7 +594,7 @@
                 :font-size 18
                 :color "#ffffff"
                 }}
-    ;; "To win, avoid moving last"
+    ;;"To win, avoid moving last"
     ;; "Last player to move loses"
     "Last player able to move loses"
     ]
@@ -601,7 +602,7 @@
                 :font-size "14px"
                 :padding "0px"
                 }}
-    "To cross out dots, click on them or drag a horizontal, vertical or 45° line through them. Lines must not cross."]
+    "To cross out dots, click on them or drag a horizontal, vertical or 45 degree line through them. Lines must not cross."]
    [:p {:style {:color "#ffffff"
                 :font-size "12px"
                 :font-style "italic"
