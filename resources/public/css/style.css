@@ -70,10 +70,22 @@ body {
     margin: 0 auto;
     color: white;
     text-align: center;
-    font-size: 1.6em;
+    font-size: 1.7em;
     font-family: "Helvetica Neue" "Arial" sans;
     border-bottom-left-radius: 15px;
     border-bottom-right-radius: 15px;
+}
+
+.footer {
+    text-align: center;
+    background-color: #0E4653;
+}
+
+.footer :first-child {
+    margin: 5px;
+    padding: 10px 0 0 0;
+    font-size: 18px;
+    color: white;
 }
 
 #game-container {
@@ -100,30 +112,30 @@ body {
 
 @-webkit-keyframes pulse {
   from {
-      font-size: 2em;
+      font-size: 1em;
       opacity: 0.75;
   }
   50% {
-      font-size: 1.2em;
+      font-size: 1.5em;
       opacity: 1.0;
   }
   to {
-    font-size: 2em;
+    font-size: 1em;
     opacity: 0.75;
   }
 }
 
 @keyframes pulse {
   from {
-      font-size: 1.6em;
+      font-size: 1em;
       opacity: 0.75;
   }
   50% {
-      font-size: 2em;
+      font-size: 1.5em;
       opacity: 1.0;
   }
   to {
-    font-size: 1.6em;
+    font-size: 1em;
     opacity: 0.75;
   }
 }

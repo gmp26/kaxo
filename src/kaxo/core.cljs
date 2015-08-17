@@ -8,9 +8,11 @@
 
 (enable-console-print!)
 
-(defn deb ([x]
-   "print value as identity for debug use"
+(defn deb
+  "print and return value"
+  ([x]
    (prn x) x)
+
   ([s x]
    (prn (str s x)) x))
 
@@ -38,6 +40,14 @@
 (defonce drag-line (atom [nil 0]))
 (defonce w-points (atom #{}))
 (defonce history (atom initial-history))
+
+;;;
+;; unused
+;;;
+(defn on-js-reload
+  "placeholder for development browser reloaded code"
+  []
+(swap! game update-in [:__figwheel_counter] inc))
 
 ;;;
 ;; history for undo-redo handling
@@ -284,18 +294,53 @@
 
 (defn undo
   "undo button handler"
-  [_]
+  [event]
+  (.preventDefault event)
   (undo!)
   )
 
 (defn redo
   "redo button handler"
-  [_]
+  [event]
+  (.preventDefault event)
   (redo!)
   )
 
 (defn scale [factor]
   (fn [[x y]] [(* factor x) (* factor y)]))
+
+
+(defn touchXY [event]
+  (let [touch (aget (.-changedTouches event) 0)
+        client [(.-clientX touch) (.-clientY touch)]]
+    #_(.log js/console (str " client " client))
+    client
+    ))
+
+(defn mouseXY [event]
+  (let [client [(.-clientX event) (.-clientY event)]]
+    #_(.log js/console (str " client " client))
+    client
+))
+
+(defn eventXY [event]
+  (if (and
+       (= (subs (.-type event) 0 5) "touch")
+       (nil? (aget (.-touches event) 0) ))
+    prn (.-type event))
+  (let [type (subs (.-type event) 0 5)
+        result (condp = type
+                 "mouse" ["mouse" (mouseXY event)]
+                 "touch" ["touch " (touchXY event)]
+                 [0 0]
+                 )]
+    #_(prn result)
+    (second result))
+)
+
+
+
+
 
 (defn mouse->svg
   "browser independent transform from mouse/touch coords to svg viewport"
@@ -306,10 +351,16 @@
              (do
                (reset! svg-point (.createSVGPoint svg))
                @svg-point))
-        matrix (.inverse (.getScreenCTM svg))]
+        matrix (.inverse (.getScreenCTM svg))
+        [x' y'] [(.-clientX event) (.-clientY event)]
+        [x y] (eventXY event)
+        ]
     (do
-      (set! (.-x pt) (.-clientX event))
-      (set! (.-y pt) (.-clientY event))
+
+      ;; (set! (.-x pt) (.-clientX event))
+      ;; (set! (.-y pt) (.-clientY event))
+      (aset pt "x" x)
+      (aset pt "y" y)
       ;(.log js/console (str  "x,y=" (.-x pt) (.-y pt)))
       (reset! svg-point (.matrixTransform pt matrix))
       [(.-x @svg-point) (.-y @svg-point)])
@@ -339,6 +390,7 @@
         new-w-points (union @w-points #{dot})]
     (do
       (.preventDefault event)
+      (.stopPropagation event)
       (if (= (:players g) 2)
         (when (not (@w-points dot))
           (do
@@ -351,6 +403,7 @@
 
 (defn handle-start-line [event]
   (.preventDefault event)
+  (.stopPropagation event)
   (let [svg (mouse->svg event)
         dot (game->dot ((svg->game @game) svg))
         ]
@@ -359,6 +412,7 @@
 
 (defn handle-move-line [event]
   (.preventDefault event)
+  (.stopPropagation event)
   (let [svg (mouse->svg event)
         g @game
         [[drag-start _ :as dl] started-at] @drag-line
@@ -408,6 +462,7 @@
 
 (defn handle-end-line [event]
   (.preventDefault event)
+  (.stopPropagation event)
   (let [svg (mouse->svg event)
         g @game
         [[draw-start _] started-at] @drag-line
@@ -557,42 +612,73 @@
    [:p {:key "b3"} (str (r/react w-points))]
 ])
 
-(r/defc tool-bar < r/reactive [g]
+(r/defc tool-bar < r/reactive
+  "render top toolbar"
+  [g]
   (let [active (fn [g player-count]
                  (if (= player-count (:players g)) "active" ""))]
-    [:div
-     [:div {:class "btn-group toolbar"}
-      [:button {:type "button"
-                :class (str "btn btn-success " (if (> (:n g) min-n) "" "disabled"))
-                :key "bu1" :on-click down-tap :on-touch-end down-tap}
-       [:span {:class "fa fa-chevron-down"}]]
-      [:button {:type "button"
-                :class (str "btn btn-success " (if (< (:n g) max-n) "" "disabled")) :key "bu2" :on-click up-tap :on-touch-end up-tap}
-       [:span {:class "fa fa-chevron-up"}]]
-      [:button {:type "button" :class (str "btn btn-default " (active g 1)) :key "bu3" :disabled "true" :on-click one-player :on-touch-end one-player} "1 player"]
-      [:button {:type "button" :class (str "btn btn-default " (active g 2)) :key "bu4" :on-click two-player :on-touch-end two-player} "2 player"]
-      [:button {:type "button" :class "btn btn-info" :key "bu5" :on-click undo :on-touch-end undo}
-       [:span {:class "fa fa-undo"}]]
-      [:button {:type "button" :class "btn btn-info" :key "bu6" :on-click redo :on-touch-end redo}
-       [:span {:class "fa fa-repeat"}]]
-      ]]))
+    [:div {:class "btn-group toolbar"}
+     [:button {:type "button"
+               :class (str "btn btn-success " (if (> (:n g) min-n) "" "disabled"))
+               :key "bu1"
+               :on-click down-tap
+               :on-touch-end down-tap}
+      [:span {:class "fa fa-chevron-down"}]]
+     [:button {:type "button"
+               :class (str "btn btn-success " (if (< (:n g) max-n) "" "disabled"))
+               :key "bu2"
+               :on-click up-tap
+               :on-touch-end up-tap}
+      [:span {:class "fa fa-chevron-up"}]]
+     [:button {:type "button" :class (str "btn btn-default " (active g 1))
+               :key "bu3"
+               :disabled "true"
+               :on-click one-player
+               :on-touch-end one-player}
+      "1 player"]
+     [:button {:type "button"
+               :class (str "btn btn-default " (active g 2))
+               :key "bu4"
+               :on-click two-player
+               :on-touch-end two-player} "2 player"]
+     [:button {:type "button"
+               :class "btn btn-info"
+               :key "bu5"
+               :on-click undo
+               :on-touch-end undo}
+      [:span {:class "fa fa-undo"}]]
+     [:button {:type "button"
+               :class "btn btn-info"
+               :key "bu6"
+               :on-click redo
+               :on-touch-end redo}
+      [:span {:class "fa fa-repeat"}]]
+     ]))
 
-(r/defc status-bar < r/reactive [g wps]
+(r/defc status-bar < r/reactive
+  "render top status bar"
+  [g wps]
   (let [[over-class status] (get-status g wps)]
     [:div
-     [:p {:class (str "status " over-class) :style {:background-color (get-fill status)} :key "b4"} (get-message status)
-      [:button {:type "button" :class "btn btn-danger" :style {:display "inline" :clear "none" :float "right"} :key "bu7" :on-click reset-game :on-touch-end reset-game}
+     [:p {:class (str "status " over-class)
+          :style {:background-color (get-fill status)} :key "b4"} (get-message status)
+      [:button {:type "button"
+                :class "btn btn-danger"
+                :style {:display "inline"
+                        :clear "none"
+                        :float "right"
+                        :border-bottom-right-radius "35%"
+                        }
+                :key "bu7"
+                :on-click reset-game
+                :on-touch-end reset-game}
        [:span {:class "fa fa-refresh"}]]]]))
 
-(r/defc rules []
-  [:section {:style {:text-align "center"
-                     :background-color "#072F2F"
-                     }}
-   [:p {:style {
-                :text-align "center"
-                :font-size 18
-                :color "#ffffff"
-                }}
+(r/defc footer
+  "render footer with rules and copyright"
+  []
+  [:section {:class "footer"}
+   [:h2
     ;;"To win, avoid moving last"
     ;; "Last player to move loses"
     "Last player able to move loses"
@@ -603,13 +689,18 @@
                 }}
     "To cross out dots, click on them or drag a horizontal, vertical or 45 degree line through them. Lines must not cross."]
    [:p {:style {:color "#ffffff"
+                :background-color "#000000"
                 :font-size "12px"
                 :font-style "italic"
                 }}
-    "Kaxo is ©Alex Voak 2015. Used with permission."]
+    "Kaxo game ©Alex Voak 2015. Used with permission."
+    [:a {:href "https://github.com/gmp26/kaxo"}
+     " Source code and licence"]]
    ])
 
-(r/defc game-over-modal < r/reactive []
+(r/defc game-over-modal < r/reactive
+  "game over modal currently unused"
+  []
   [:div {:class "modal-container"}
    [:div {:class "game-over-modal" :id "game-over" }
     [:h1 "Game Over"]
@@ -618,7 +709,9 @@
     [:button {:type "button " :class (str "btn btn-lg btn-primary ")} "OK"]
     ]])
 
-(r/defc game-container  < r/reactive []
+(r/defc game-container  < r/reactive
+  "the game container mounted onto the html game element"
+  []
   (let [g (r/react game)
         wps (r/react w-points)]
     [:section {:id "game-container"}
@@ -627,8 +720,7 @@
       (tool-bar g)
       (status-bar g wps)]
      (svg-grid g)
-     (rules)
-     #_(goal g)
+     (footer)
      #_(debug-game g)]))
 
 (defn initialise []
@@ -639,7 +731,3 @@
   )
 
 (initialise)
-
-(defn on-js-reload []
-
-(swap! game update-in [:__figwheel_counter] inc))
