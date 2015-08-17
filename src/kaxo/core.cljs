@@ -294,9 +294,6 @@
   (redo!)
   )
 
-(defn start-game [] (reset-game))
-
-
 (defn scale [factor]
   (fn [[x y]] [(* factor x) (* factor y)]))
 
@@ -588,7 +585,9 @@
        [:span {:class "fa fa-refresh"}]]]]))
 
 (r/defc rules []
-  [:section {:style {:text-align "center"}}
+  [:section {:style {:text-align "center"
+                     :background-color "#072F2F"
+                     }}
    [:p {:style {
                 :text-align "center"
                 :font-size 18
