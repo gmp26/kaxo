@@ -1,7 +1,8 @@
 body {
     max-width: 600px !important;
     margin: auto !important;
-    background-color: white !important;
+    background-color:#667274  !important;
+    /*background-color: white;*/
 }
 
 .full-width {

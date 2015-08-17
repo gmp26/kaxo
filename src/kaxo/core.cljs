@@ -329,8 +329,8 @@
 
 (defn add-way-points
   "find dots traversed by line.
-  Include mid-points btween dots on diagonal lines
-  A zero slope-type means horizontal or vertical, else it is the gradient
+  Include mid-points btween dots on diagonal lines.
+  A zero slope-type means horizontal or vertical, else it's the line gradient
   Only 0, -1, 1 slope-types are allowed"
   [[[x1 y1] [x2 y2] :as [p1 p2]] slope-type]
   (if (= 0 slope-type)
@@ -363,33 +363,26 @@
 (defn scale [factor]
   (fn [[x y]] [(* factor x) (* factor y)]))
 
-(defn touchXY [event]
-  (let [touch (aget (.-changedTouches event) 0)
-        client [(.-clientX touch) (.-clientY touch)]]
-    #_(.log js/console (str " client " client))
-    client
-    ))
+(defn touchXY
+  "get position of first changed touch"
+  [event]
+  (let [touch (aget (.-changedTouches event) 0)]
+    [(.-clientX touch) (.-clientY touch)]))
 
-(defn mouseXY [event]
-  (let [client [(.-clientX event) (.-clientY event)]]
-    #_(.log js/console (str " client " client))
-    client
-))
+(defn mouseXY
+  "get mouse position"
+  [event]
+  [(.-clientX event) (.-clientY event)])
 
-(defn eventXY [event]
-  (if (and
-       (= (subs (.-type event) 0 5) "touch")
-       (nil? (aget (.-touches event) 0) ))
-    prn (.-type event))
-  (let [type (subs (.-type event) 0 5)
-        result (condp = type
-                 "mouse" ["mouse" (mouseXY event)]
-                 "touch" ["touch " (touchXY event)]
-                 [0 0]
-                 )]
-    #_(prn result)
-    (second result))
-)
+(defn eventXY
+  "get touch or mouse position"
+  [event]
+  (let [type (subs (.-type event) 0 5)]
+    (condp = type
+      "mouse" (mouseXY event)
+      "touch" (touchXY event)
+      (deb (str "strange event " (.type event)) [0 0]) ; ?? does this happen ??
+      )))
 
 (defn mouse->svg
   "browser independent transform from mouse/touch coords to svg viewport"
@@ -401,14 +394,14 @@
                (reset! svg-point (.createSVGPoint svg))
                @svg-point))
         matrix (.inverse (.getScreenCTM svg))
-        [x' y'] [(.-clientX event) (.-clientY event)]
+        ;; [x' y'] [(.-clientX event) (.-clientY event)]
         [x y] (eventXY event)
         ]
     ;; (set! (.-x pt) (.-clientX event))
     ;; (set! (.-y pt) (.-clientY event))
     (aset pt "x" x)
     (aset pt "y" y)
-                                        ;(.log js/console (str  "x,y=" (.-x pt) (.-y pt)))
+    ;(.log js/console (str  "x,y=" (.-x pt) (.-y pt)))
     (reset! svg-point (.matrixTransform pt matrix))
     [(.-x @svg-point) (.-y @svg-point)]
 ))
@@ -491,18 +484,17 @@
         ]
     (if is-tap
       (handle-tap event)
-      (do
-        (when new-wps
-          (when (not-any? new-wps old-wps)
-            (let [line-key (if (= :a (:player g)) :a-lines :b-lines)
-                  updated-lines (conj (line-key g) line)
-                  new-player (if (= (:player g) :a) :b :a)]
-              (swap! game #(assoc %
-                                  line-key updated-lines
-                                  :player new-player))
-              (reset! w-points (union old-wps new-wps))
-              )))
-        (push-history! @game @w-points)))
+      (when new-wps
+        (when (not-any? new-wps old-wps)
+          (let [line-key (if (= :a (:player g)) :a-lines :b-lines)
+                updated-lines (conj (line-key g) line)
+                new-player (if (= (:player g) :a) :b :a)]
+            (swap! game #(assoc %
+                                line-key updated-lines
+                                :player new-player))
+            (reset! w-points (union old-wps new-wps))
+            )))
+      (push-history! @game @w-points))
     (reset! drag-line [nil 0])
     ))
 
