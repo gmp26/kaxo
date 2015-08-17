@@ -229,16 +229,9 @@
 ;;;
 ;;; game play
 ;;;
-(defn get-ai-move [player] nil)
-
-(defn computer-turn [g]
-  (prn "play computer turn")
-  (get-ai-move :b)
-)
-
 (defn claim-a-point
-  [cross point]
   "claim a point for player a"
+  [cross point]
   (swap! game #(assoc % :player :b :a-crosses (conj cross point)))
   )
 
@@ -259,21 +252,33 @@
 ;;;
 ;;; events
 ;;;
-(defn timeout [ms f & xs]
+(defn timeout
   "Call f, optionally with arguments xs, after ms milliseconds"
+  [ms f & xs]
   (js/setTimeout #(apply f xs) ms))
 
-(defn single-player-point [g wps a-crosses b-crosses point]
-  (do
-    ;todo
-    (swap! history #(conj % [g wps]))
-    (when (not (or (game-over? g wps) (game-drawn? g)))
-      (claim-a-point a-crosses point))
-    (let [newg @game]
-      (when (not (or (game-over? newg wps) (game-drawn? newg)))
-        (timeout al-think-time #(->> newg
-                                     (computer-turn)
-                                     (claim-b-point b-crosses)))))))
+(defn get-ai-move [player] nil)
+
+(defn computer-turn
+  "play computer turn"
+  [g]
+  (prn "play computer turn")
+  (get-ai-move :b)
+)
+
+(defn single-player-point
+  "make a move in single player mode"
+  [g wps a-crosses b-crosses point]
+
+  (swap! history #(conj % [g wps]))
+  (when (not (or (game-over? g wps) (game-drawn? g)))
+    (claim-a-point a-crosses point))
+
+  (let [newg @game]
+    (when (not (or (game-over? newg wps) (game-drawn? newg)))
+      (timeout al-think-time #(->> newg
+                                   (computer-turn)
+                                   (claim-b-point b-crosses))))))
 
 (defn change-players [count]
   (swap! game #(assoc %
@@ -308,9 +313,55 @@
   (redo!)
   )
 
+;;;
+;; game state updates
+;;;
+(defn canonical-line
+  "convert line to a canonical form for equality comparisons"
+  [[p1 p2 :as line]]
+  (let [[[x1 y1] [x2 y2]] [p1 p2]]
+    (if (or (< x1 x2)
+            (and (= x1 x2)
+                 (< y1 y2))
+            )
+      line
+      [p2 p1])))
+
+(defn add-way-points
+  "find dots traversed by line.
+  Include mid-points btween dots on diagonal lines
+  A zero slope-type means horizontal or vertical, else it is the gradient
+  Only 0, -1, 1 slope-types are allowed"
+  [[[x1 y1] [x2 y2] :as [p1 p2]] slope-type]
+  (if (= 0 slope-type)
+    (if (= x1 x2)
+      (into #{} (for [y (range y1 (inc y2) 1)] [x1 y]))
+      (into #{} (for [x (range x1 (inc x2) 1)] [x y1])))
+    (into #{} (for [x (range x1 (+ x2 0.4) 0.5)]
+                [x (+ y1 (* (- x x1) slope-type))]))
+    )
+)
+
+(defn new-way-points
+  "way-points that a line crosses or nil for bad gradient or a point-line"
+  [[[x1 y1] [x2 y2] :as [p1 p2 :as p]]]
+  (if (= p1 p2)
+    nil
+    (let [dx (- x2 x1)
+          dy (- y2 y1)]
+      (cond
+       (= 0 dx) (add-way-points p 0)
+       (= 0 dy) (add-way-points p 0)
+       (= dx dy) (add-way-points p 1)
+       (= dx (- dy)) (add-way-points p -1)
+       :else nil
+       ))))
+
+;;;
+;; mouse coordinate transforms
+;;;
 (defn scale [factor]
   (fn [[x y]] [(* factor x) (* factor y)]))
-
 
 (defn touchXY [event]
   (let [touch (aget (.-changedTouches event) 0)
@@ -340,10 +391,6 @@
     (second result))
 )
 
-
-
-
-
 (defn mouse->svg
   "browser independent transform from mouse/touch coords to svg viewport"
   [event]
@@ -357,21 +404,23 @@
         [x' y'] [(.-clientX event) (.-clientY event)]
         [x y] (eventXY event)
         ]
-    (do
-
-      ;; (set! (.-x pt) (.-clientX event))
-      ;; (set! (.-y pt) (.-clientY event))
-      (aset pt "x" x)
-      (aset pt "y" y)
-      ;(.log js/console (str  "x,y=" (.-x pt) (.-y pt)))
-      (reset! svg-point (.matrixTransform pt matrix))
-      [(.-x @svg-point) (.-y @svg-point)])
+    ;; (set! (.-x pt) (.-clientX event))
+    ;; (set! (.-y pt) (.-clientY event))
+    (aset pt "x" x)
+    (aset pt "y" y)
+                                        ;(.log js/console (str  "x,y=" (.-x pt) (.-y pt)))
+    (reset! svg-point (.matrixTransform pt matrix))
+    [(.-x @svg-point) (.-y @svg-point)]
 ))
 
-(defn game->dot [[x y]]
+(defn game->dot
+  "game coords to integer game coords"
+  [[x y]]
   [(.round js/Math x) (.round js/Math y)])
 
-(defn svg->game [g]
+(defn svg->game
+  "transform from svg viewport coords to game coords"
+  [g]
   (comp
    (fn [[x y]] [(spag x) (spag y)])
    (scale (/ (:n g) scale-n ))
@@ -382,7 +431,9 @@
   [event]
   (game->dot ((svg->game @game) (mouse->svg event))))
 
-(defn handle-tap [event]
+(defn handle-tap
+  "handle a tap or click on a dot"
+  [event]
   (let [g @game
         svg (mouse->svg event)
         dot (game->dot ((svg->game @game) svg))
@@ -392,7 +443,6 @@
         new-w-points (union @w-points #{dot})]
     (do
       (.preventDefault event)
-      (.stopPropagation event)
       (if (= (:players g) 2)
         (when (not (@w-points dot))
           (do
@@ -403,18 +453,20 @@
           (single-player-point g @w-points a-crosses b-crosses dot)))
       (push-history! @game @w-points))))
 
-(defn handle-start-line [event]
+(defn handle-start-line
+  "start dragging a line"
+  [event]
   (.preventDefault event)
-  (.stopPropagation event)
   (let [svg (mouse->svg event)
         dot (game->dot ((svg->game @game) svg))
         ]
     (reset! drag-line [[dot dot] (.now js/Date)])
 ))
 
-(defn handle-move-line [event]
+(defn handle-move-line
+  "continue dragging a line"
+  [event]
   (.preventDefault event)
-  (.stopPropagation event)
   (let [svg (mouse->svg event)
         g @game
         [[drag-start _ :as dl] started-at] @drag-line
@@ -423,48 +475,10 @@
       (reset! drag-line [[drag-start drag-end] started-at])
 )))
 
-(defn canonical-line [[p1 p2 :as line]]
-  (let [[[x1 y1] [x2 y2]] [p1 p2]]
-    (if (or (< x1 x2)
-            (and (= x1 x2)
-                 (< y1 y2))
-            )
-      line
-      [p2 p1])))
-
-(defn add-way-points [[[x1 y1] [x2 y2] :as [p1 p2]] slope-type]
-  ;"Given a doubled line segment and a slope type,"
-  "find dots traversed by line."
-  "Include mid-points btween dots on diagonal lines"
-  "A zero slope-type means horizontal or vertical, else it means gradient"
-  "Only 0, -1, 1 slope-types are allowed"
-  (if (= 0 slope-type)
-    (if (= x1 x2)
-      (into #{} (for [y (range y1 (inc y2) 1)] [x1 y]))
-      (into #{} (for [x (range x1 (inc x2) 1)] [x y1])))
-    (into #{} (for [x (range x1 (+ x2 0.4) 0.5)]
-                [x (+ y1 (* (- x x1) slope-type))]))
-    )
-)
-
-(defn new-way-points [[[x1 y1] [x2 y2] :as [p1 p2 :as p]]]
-  "way-points that a line crosses or nil for bad gradient or a point-line"
-  (if (= p1 p2)
-    nil
-    (let [dx (- x2 x1)
-          dy (- y2 y1)]
-      (cond
-       (= 0 dx) (add-way-points p 0)
-       (= 0 dy) (add-way-points p 0)
-       (= dx dy) (add-way-points p 1)
-       (= dx (- dy)) (add-way-points p -1)
-       :else nil
-       ))))
-
-
-(defn handle-end-line [event]
+(defn handle-end-line
+  "handle end of drag. Convert to a tap if not moved"
+  [event]
   (.preventDefault event)
-  (.stopPropagation event)
   (let [svg (mouse->svg event)
         g @game
         [[draw-start _] started-at] @drag-line
@@ -586,7 +600,6 @@
          :on-touch-start handle-start-line
          :on-touch-move handle-move-line
          :on-touch-end handle-end-line
-         :style {:display-mode "inline-block"}
          }
    (let [n (:n g)]
      [:g {:id "box" :transform (str "scale(" (* 1 (/ scale-n n)) ")")}
