@@ -54,15 +54,17 @@
 ;;;
 (defn reset-history!
   "reset history to start a new game"
-  []
-  (reset! history initial-history)
+  [n]
+  #_(prn (str "new history " n))
+  (let [ih (assoc-in initial-history [1 0 0 :n] n)]
+    (reset! history ih))
   )
 
 (defn push-history!
   "record game state in history. Do this after a new game move"
   [g wps]
   (let [[n log] @history]
-    (prn (str "history " n " -> " (inc n)))
+    #_(prn (str "history " n " -> " (inc n)))
     (reset! history [(inc n) (conj log [g wps])])))
 
 (defn undo!
@@ -72,8 +74,8 @@
         last-n (if (> n 0) (- n 1) 0)
         state (nth log last-n)]
     (reset! history [last-n log])
-    (prn "first log")
-    (prn (first  state))
+    #_(prn "first log")
+    #_(prn (first  state))
     (reset! game (first state))
     (reset! w-points (last state))))
 
@@ -101,7 +103,7 @@
                          :b-lines #{}
                          ))
    (reset! w-points #{})
-   (reset-history!))
+   (reset-history! 4))
   ([event]
    (.preventDefault event)
    (reset-game))
@@ -196,7 +198,7 @@
 ;;
 ;; reset the game initially
 ;;
-(defn resize-game-board!! [n]
+(defn resize-game-board! [n]
   (swap! game #(assoc %
                    :a-crosses #{}
                    :b-crosses #{}
@@ -204,7 +206,7 @@
                    :b-lines #{}
                    :n n))
   (reset! w-points #{})
-  (reset-history!))
+  (reset-history! n))
 
 (defn up-tap [event]
   "grow the game by 1 unit up to a 5 x 5 square"
@@ -212,7 +214,7 @@
   (.preventDefault event)
   (let [old-n (:n @game)
         new-n (if (< old-n max-n) (inc old-n) max-n)]
-    (resize-game-board!! new-n)
+    (resize-game-board! new-n)
     ))
 
 (defn down-tap [event]
@@ -221,7 +223,7 @@
   (.preventDefault event)
   (let [old-n (:n @game)
         new-n (if (> old-n min-n) (- old-n 1) min-n)]
-    (resize-game-board!! new-n)
+    (resize-game-board! new-n)
     ))
 
 ;;;
@@ -490,9 +492,9 @@
     (reset! drag-line [nil 0])
     ))
 
-;;
-;; rendering game board
-;;
+;;;
+;; rendering
+;;;
 (defn cross-colour [g point]
   (if ((:a-crosses g) point)
     (:a colours)
@@ -555,26 +557,22 @@
              :fill "none"}
             ]]))
 
-;;;
-;; rendering
-;;;
 (r/defc svg-dot < r/reactive [n x y fill]
   (let [p [x y]
         g (r/react game)
         the-class #(if ((:a-crosses g) p)  "dot claimed" "dot")
         ]
-    (do
-      [:circle {
-                :class (the-class)
-                :cx (gaps x)
-                :cy (gaps y)
-                :r (units 8)
-                :fill fill
-                :stroke "#cceecc"
-                :stroke-width (units  8)
-                :id (str "[" x " " y "]")
-                :key (str "[" x " " y "]")
-                }])))
+    [:circle {
+              :class (the-class)
+              :cx (gaps x)
+              :cy (gaps y)
+              :r (units 8)
+              :fill fill
+              :stroke "#cceecc"
+              :stroke-width (units  8)
+              :id (str "[" x " " y "]")
+              :key (str "[" x " " y "]")
+              }]))
 
 (r/defc svg-grid < r/reactive [g]
   [:svg {:view-box (str "0 0 " viewport-width " " viewport-height)
@@ -677,37 +675,30 @@
 (r/defc footer
   "render footer with rules and copyright"
   []
-  [:section {:class "footer"}
+  [:section {:id "footer"}
    [:h2
     ;;"To win, avoid moving last"
     ;; "Last player to move loses"
     "Last player able to move loses"
     ]
-   [:p {:style {:color "#ffffff"
-                :font-size "14px"
-                :padding "0px"
-                }}
+   [:p
     "To cross out dots, click on them or drag a horizontal, vertical or 45 degree line through them. Lines must not cross."]
-   [:p {:style {:color "#ffffff"
-                :background-color "#000000"
-                :font-size "12px"
-                :font-style "italic"
-                }}
+   [:p
     "Kaxo game ©Alex Voak 2015. Used with permission."
     [:a {:href "https://github.com/gmp26/kaxo"}
      " Source code and licence"]]
    ])
 
-(r/defc game-over-modal < r/reactive
-  "game over modal currently unused"
-  []
-  [:div {:class "modal-container"}
-   [:div {:class "game-over-modal" :id "game-over" }
-    [:h1 "Game Over"]
-    [:p :style "" "Red won"]
-    [:div {:class "modal-body"}]
-    [:button {:type "button " :class (str "btn btn-lg btn-primary ")} "OK"]
-    ]])
+;; (r/defc game-over-modal < r/reactive
+;;   "game over modal currently unused"
+;;   []
+;;   [:div {:class "modal-container"}
+;;    [:div {:class "game-over-modal" :id "game-over" }
+;;     [:h1 "Game Over"]
+;;     [:p :style "" "Red won"]
+;;     [:div {:class "modal-body"}]
+;;     [:button {:type "button " :class (str "btn btn-lg btn-primary ")} "OK"]
+;;     ]])
 
 (r/defc game-container  < r/reactive
   "the game container mounted onto the html game element"
@@ -716,7 +707,7 @@
         wps (r/react w-points)]
     [:section {:id "game-container"}
      [:div {:class "full-width"}
-      [:p {:style {:color "white" :font-size "1.8em" :padding-top "8px"}} "Kaxo"]
+      [:p {:id "header"} "Kaxo"]
       (tool-bar g)
       (status-bar g wps)]
      (svg-grid g)
