@@ -55,7 +55,7 @@
 (defn reset-history!
   "reset history to start a new game"
   [n]
-  #_(prn (str "new history " n))
+  (prn (str "new history " n))
   (let [ih (assoc-in initial-history [1 0 0 :n] n)]
     (reset! history ih))
   )
@@ -103,7 +103,7 @@
                          :b-lines #{}
                          ))
    (reset! w-points #{})
-   (reset-history! 4))
+   (reset-history! (:n @game)))
   ([event]
    (.preventDefault event)
    (reset-game))
@@ -160,20 +160,22 @@
 (defn game-drawn? [g] false)
 
 (defn removed-points [wps]
-  (filter (fn [[x y]] (even? (* 2 x)) (even? (* 2 y))) wps))
+  (filter (fn [[x y]] (and (even? (* 2 x)) (even? (* 2 y)))) wps))
 
-(defn game-over? [g wps]
+(defn game-over?
   "return :a :b or false"
+  [g wps]
   (let [n (:n g)
         r-max (* n n)
         r-count (inc (count (removed-points wps)))]
     (cond
      (< r-max r-count) (if (= (:player g) :a) :b :a)
      (= r-max r-count) (:player g)
-     :else false)
-    ))
+     :else false)))
 
-(defn get-status [g wps]
+(defn get-status
+  "derive win/lose/turn status"
+  [g wps]
   (let [pa (= (:player g) :a)
         gover (game-over? g wps)
         over-class (if gover " pulsed" "")]
@@ -214,8 +216,7 @@
   (.preventDefault event)
   (let [old-n (:n @game)
         new-n (if (< old-n max-n) (inc old-n) max-n)]
-    (resize-game-board! new-n)
-    ))
+    (resize-game-board! new-n)))
 
 (defn down-tap [event]
   "shrink the game by 1 unit down to a min-n square"
@@ -223,8 +224,7 @@
   (.preventDefault event)
   (let [old-n (:n @game)
         new-n (if (> old-n min-n) (- old-n 1) min-n)]
-    (resize-game-board! new-n)
-    ))
+    (resize-game-board! new-n)))
 
 ;;;
 ;;; game play
@@ -263,8 +263,7 @@
   "play computer turn"
   [g]
   (prn "play computer turn")
-  (get-ai-move :b)
-)
+  (get-ai-move :b))
 
 (defn single-player-point
   "make a move in single player mode"
@@ -287,8 +286,7 @@
                  :a-crosses #{}
                  :b-crosses #{}
                  :a-lines #{}
-                 :b-lines #{}
-                 ))
+                 :b-lines #{}))
   (reset! w-points #{}))
 
 (defn one-player [event]
@@ -303,15 +301,13 @@
   "undo button handler"
   [event]
   (.preventDefault event)
-  (undo!)
-  )
+  (undo!))
 
 (defn redo
   "redo button handler"
   [event]
   (.preventDefault event)
-  (redo!)
-  )
+  (redo!))
 
 ;;;
 ;; game state updates
@@ -338,9 +334,7 @@
       (into #{} (for [y (range y1 (inc y2) 1)] [x1 y]))
       (into #{} (for [x (range x1 (inc x2) 1)] [x y1])))
     (into #{} (for [x (range x1 (+ x2 0.4) 0.5)]
-                [x (+ y1 (* (- x x1) slope-type))]))
-    )
-)
+                [x (+ y1 (* (- x x1) slope-type))]))))
 
 (defn new-way-points
   "way-points that a line crosses or nil for bad gradient or a point-line"
@@ -354,8 +348,7 @@
        (= 0 dy) (add-way-points p 0)
        (= dx dy) (add-way-points p 1)
        (= dx (- dy)) (add-way-points p -1)
-       :else nil
-       ))))
+       :else nil))))
 
 ;;;
 ;; mouse coordinate transforms
@@ -403,8 +396,7 @@
     (aset pt "y" y)
     ;(.log js/console (str  "x,y=" (.-x pt) (.-y pt)))
     (reset! svg-point (.matrixTransform pt matrix))
-    [(.-x @svg-point) (.-y @svg-point)]
-))
+    [(.-x @svg-point) (.-y @svg-point)]))
 
 (defn game->dot
   "game coords to integer game coords"
@@ -416,8 +408,7 @@
   [g]
   (comp
    (fn [[x y]] [(spag x) (spag y)])
-   (scale (/ (:n g) scale-n ))
-   ))
+   (scale (/ (:n g) scale-n ))))
 
 (defn mouse->dot
   "find dot under mouse/touch point"
@@ -451,10 +442,8 @@
   [event]
   (.preventDefault event)
   (let [svg (mouse->svg event)
-        dot (game->dot ((svg->game @game) svg))
-        ]
-    (reset! drag-line [[dot dot] (.now js/Date)])
-))
+        dot (game->dot ((svg->game @game) svg))        ]
+    (reset! drag-line [[dot dot] (.now js/Date)])))
 
 (defn handle-move-line
   "continue dragging a line"
@@ -465,8 +454,7 @@
         [[drag-start _ :as dl] started-at] @drag-line
         drag-end ((svg->game g) svg)]
     (when dl
-      (reset! drag-line [[drag-start drag-end] started-at])
-)))
+      (reset! drag-line [[drag-start drag-end] started-at]))))
 
 (defn handle-end-line
   "handle end of drag. Convert to a tap if not moved"
@@ -493,8 +481,7 @@
                                 line-key updated-lines
                                 :player new-player))
             (reset! w-points (union old-wps new-wps))
-            )))
-      (push-history! @game @w-points))
+            (push-history! @game @w-points)))))
     (reset! drag-line [nil 0])
     ))
 
@@ -611,8 +598,9 @@
   "heads up game state display"
   [:div {:class "debug"}
    [:p {:key "b1"} (str g)]
-   [:p {:key "b2"} (str (r/react drag-line))]
-   [:p {:key "b3"} (str (r/react w-points))]
+   [:p {:key "b2"} (str "drag "(r/react drag-line))]
+   [:p {:key "b3"} (str "w-points " (r/react w-points))]
+   [:p {:key "b5"} (str "hist " (r/react history))]
 ])
 
 (r/defc tool-bar < r/reactive
@@ -635,7 +623,6 @@
       [:span {:class "fa fa-chevron-up"}]]
      [:button {:type "button" :class (str "btn btn-default " (active g 1))
                :key "bu3"
-               :disabled "true"
                :on-click one-player
                :on-touch-end one-player}
       "1 player"]
@@ -691,7 +678,7 @@
    [:p
     "Kaxo game ©Alex Voak 2015. Used with permission."
     [:a {:href "https://github.com/gmp26/kaxo"}
-     " Source code and licence"]]
+     " Source on github"]]
    ])
 
 ;; (r/defc game-over-modal < r/reactive
@@ -717,13 +704,15 @@
       (status-bar g wps)]
      (svg-grid g)
      (footer)
-     #_(debug-game g)]))
+     (debug-game g)]))
 
 (defn initialise []
   (.initializeTouchEvents js/React true)
 
   ;; mount main component on html game element
   (r/mount (game-container) (el "game"))
+
+  (reset-game)
   )
 
 (initialise)
