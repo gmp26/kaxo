@@ -28,6 +28,7 @@
                     :b-crosses #{}
                     :a-lines #{}
                     :b-lines #{}
+                    :block false
                     })
 
 (def initial-history [0 [[initial-state #{}]]])
@@ -108,11 +109,9 @@
   )
 
 (defn push-history!
-  "record game state in history. Do this after a new game move"
-  []
-  (let [g @game
-        wps @w-points
-        [n log] @history]
+  "Record game state in history"
+  [g wps]
+  (let [[n log] @history]
     #_(prn (str "history " n " -> " (inc n)))
     (reset! history [(inc n) (conj log [g wps])])))
 
@@ -229,30 +228,7 @@
     (resize-game-board! new-n)))
 
 ;;;
-;;; game play
-;;;
-(defn claim-a-point
-  "claim a point for player a"
-  [cross point]
-  (swap! game #(assoc % :player :b :a-crosses (conj cross point)))
-  )
-
-(defn claim-b-point
-  "claim a point for player b"
-  [cross point]
-  (swap! game #(assoc % :player :a :b-crosses (conj cross point)))  ;
-  )
-
-(defn claim-point
-  "claim a point for a player"
-  [a-crosses b-crosses point player]
-  (if (and (not (a-crosses point)) (not (b-crosses point)))
-    (if (= player :a)
-      (claim-a-point a-crosses point)
-      (claim-b-point b-crosses point))))
-
-;;;
-;;; events
+;; ai turn
 ;;;
 (defn delayed-call
   "Call f, optionally with arguments xs, after ms milliseconds"
@@ -270,17 +246,25 @@
   (prn "play computer turn")
   (get-ai-move))
 
-(defn single-player-moved
-  "make a move in single player mode"
-  [g wps a-crosses b-crosses point]
+(defn ai-turn?
+  "Is it time for the ai to play?. Call this after player switch"
+  [g wps pl]
+  (and (not (game-over? g wps)) (= 1 (:players g)) (= :b pl)))
 
-  (when (not (game-over? g wps))
-    (claim-a-point a-crosses point))
-
-  (let [newg @game]
-    (when (not (game-over? newg wps))
+(defn switch-player!
+  "switch player after a move"
+  []
+  (let [g @game
+        wps @w-points
+        new-pl (if (= (:player g) :a) :b :a)]
+    (prn "switch player")
+    (swap! game #(assoc % :player new-pl))
+    (when (ai-turn? g wps new-pl)
       (delayed-call al-think-time (play-ai-turn)))))
 
+;;;
+;; ui button events
+;;;
 (defn change-player-count
   "change to 1-player or 2-player mode"
   [count]
@@ -314,7 +298,19 @@
   (redo!))
 
 ;;;
-;; game state updates
+;; new point utilities (for on-tap)
+;;;
+(defn claim-point
+  "claim a point for a player"
+  [a-crosses b-crosses point player]
+  (if (and (not (a-crosses point)) (not (b-crosses point)))
+    (let [[key crosses] (if (= player :a)
+                          [:a-crosses a-crosses]
+                          [:b-crosses b-crosses])]
+      (swap! game #(assoc % key (conj crosses point))))))
+
+;;;
+;; new line utilities (for on-drag)
 ;;;
 (defn canonical-line
   "convert line to a canonical form for equality comparisons"
@@ -355,7 +351,7 @@
        :else nil))))
 
 ;;;
-;; mouse coordinate transforms
+;; svg mouse handling
 ;;;
 (defn scale [factor]
   (fn [[x y]] [(* factor x) (* factor y)]))
@@ -438,6 +434,19 @@
     (when dl
       (reset! drag-line [[drag-start drag-end] started-at]))))
 
+
+(defn end-of-turn!
+  "Change player.
+  Do this after a new game move"
+  [pl]
+  (let [g @game
+        wps @w-points
+        [n log] @history
+        new-player (if (= pl :a) :b :a)]
+    (push-history! g wps)
+    (switch-player!)))
+
+
 (defn handle-end-line
   "handle end of drag. Convert to a tap if not moved"
   [event]
@@ -456,11 +465,11 @@
       (when (not-any? new-wps old-wps)   ;new line must not intersect old-wps
         (let [line-key (if (= :a pl) :a-lines :b-lines)
               updated-lines (conj (line-key g) line)
-              new-player (if (= pl :a) :b :a)]
+              ]
           (swap! game #(assoc %
-                              line-key updated-lines
-                              :player new-player))
-          (reset! w-points (union old-wps new-wps))))
+                              line-key updated-lines))
+          (reset! w-points (union old-wps new-wps))
+          (end-of-turn! pl)))
 
       ;; handle a possible tap or click on a dot
       (when (< (- now started-at) click-interval)
@@ -471,10 +480,8 @@
             (.preventDefault event)
             (when (not (@w-points dot))
               (reset! w-points new-w-points)
-              (claim-point a-crosses b-crosses dot pl))))
-        ))
-
-    (push-history!)
+              (claim-point a-crosses b-crosses dot pl))
+            (end-of-turn! pl)))))
     (reset! drag-line [nil 0])
     ))
 
@@ -543,11 +550,9 @@
              :fill "none"}
             ]]))
 
-(r/defc svg-dot < r/reactive [n x y fill]
+(r/defc svg-dot [g n x y fill]
   (let [p [x y]
-        g (r/react game)
-        the-class #(if ((:a-crosses g) p)  "dot claimed" "dot")
-        ]
+        the-class #(if ((:a-crosses g) p)  "dot claimed" "dot")]
     [:circle {
               :class (the-class)
               :cx (gaps x)
@@ -580,7 +585,7 @@
           (if (or ((:a-crosses g) [x y]) ((:b-crosses g) [x y]))
             (render-cross g [x y])
             (if (not ((r/react w-points) [x y]))
-              (svg-dot n x y (cross-colour g [x y])))
+              (svg-dot g n x y (cross-colour g [x y])))
             )
           ))
       (render-lines g)
@@ -596,7 +601,7 @@
    [:p {:key "b5"} (str "hist " (r/react history))]
 ])
 
-(r/defc tool-bar < r/reactive
+(r/defc tool-bar
   "render top toolbar"
   [g]
   (let [active (fn [g player-count]
@@ -638,7 +643,7 @@
       [:span {:class "fa fa-repeat"}]]
      ]))
 
-(r/defc status-bar < r/reactive
+(r/defc status-bar
   "render top status bar"
   [g wps]
   (let [[over-class status] (get-status g wps)]
