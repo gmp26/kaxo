@@ -19,7 +19,7 @@
 (defn el [id] (.getElementById js/document id))
 
 ;;;
-;; state constants
+;; constants
 ;;;
 (def initial-state {:n 4
                     :player :a
@@ -32,6 +32,43 @@
 
 (def initial-history [0 [[initial-state #{}]]])
 
+(def messages {:yours "Your turn"
+               :als   "My turn"
+               :as-turn "Blue's turn"
+               :bs-turn "Red's turn"
+               :you-win "Well done! You won"
+               :al-win "Oops! You lost"
+               :a-win "Blue won!"
+               :b-win "Red won!"
+               :draw  "It's a draw!"
+               })
+
+(def message-colours {:yours :a
+                      :als   :b
+                      :as-turn :a
+                      :bs-turn :b
+                      :you-win :a
+                      :al-win :b
+                      :a-win :a
+                      :b-win :b
+                      :draw :draw
+                      })
+
+(def viewport-width 320)
+(def viewport-height 320)
+(def scale-n 9)
+(def max-n 5)
+(def min-n 3)
+(def unit 1)
+(def gap 35)
+(def al-think-time 2000)
+(def click-interval 333)
+(def colours {:a "rgb(0, 153, 255)"
+              :b "rgb(238, 68, 102)"
+              :none "rgb(220,255,220)"
+              :draw "rgb(74, 157, 97)"
+              })
+
 ;;;
 ;; define game state atoms once only so code is reloadable in figwheel
 ;;;
@@ -40,6 +77,16 @@
 (defonce drag-line (atom [nil 0]))
 (defonce w-points (atom #{}))
 (defonce history (atom initial-history))
+
+
+;;;
+;; unit conversions
+;;;
+(defn units [x] (* x unit))
+(defn stinu [x] (/ x unit)) ; inverse units
+
+(defn gaps [x] (* (units (+ x 0.5)) gap))
+(defn spag [x] (stinu (- (/ x gap) 0.5))) ; inverse gaps
 
 ;;;
 ;; unused
@@ -62,8 +109,10 @@
 
 (defn push-history!
   "record game state in history. Do this after a new game move"
-  [g wps]
-  (let [[n log] @history]
+  []
+  (let [g @game
+        wps @w-points
+        [n log] @history]
     #_(prn (str "history " n " -> " (inc n)))
     (reset! history [(inc n) (conj log [g wps])])))
 
@@ -110,64 +159,21 @@
   ([event _]
    (reset-game event)))
 
-
-(def messages {:yours "Your turn"
-               :als   "My turn"
-               :as-turn "Blue's turn"
-               :bs-turn "Red's turn"
-               :you-win "Well done! You won"
-               :al-win "Oops! You lost"
-               :a-win "Blue won!"
-               :b-win "Red won!"
-               :draw  "It's a draw!"
-               })
-
-(def message-colours {:yours :a
-                      :als   :b
-                      :as-turn :a
-                      :bs-turn :b
-                      :you-win :a
-                      :al-win :b
-                      :a-win :a
-                      :b-win :b
-                      :draw :draw
-                      })
-
-(def viewport-width 320)
-(def viewport-height 320)
-(def scale-n 9)
-(def max-n 5)
-(def min-n 3)
-(def unit 1)
-(def gap 35)
-(defn units [x] (* x unit))
-(defn stinu [x] (/ x unit)) ; inverse units
-
-(defn gaps [x] (* (units (+ x 0.5)) gap))
-(defn spag [x] (stinu (- (/ x gap) 0.5))) ; inverse gaps
-(def al-think-time 2000)
-
-(def colours {:a "rgb(0, 153, 255)"
-              :b "rgb(238, 68, 102)"
-              :none "rgb(220,255,220)"
-              :draw "rgb(74, 157, 97)"
-              })
-
 ;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; Game life cycle
 ;;
 (defn game-drawn? [g] false)
 
-(defn removed-points [wps]
-  (filter (fn [[x y]] (and (even? (* 2 x)) (even? (* 2 y)))) wps))
+(defn real-points-removed [wps]
+  (filter (fn [[x y]] (and (integer? x) (integer? y))) wps))
 
 (defn game-over?
   "return :a :b or false"
   [g wps]
   (let [n (:n g)
         r-max (* n n)
-        r-count (inc (count (removed-points wps)))]
+        r-count (inc (count (real-points-removed wps)))]
     (cond
      (< r-max r-count) (if (= (:player g) :a) :b :a)
      (= r-max r-count) (:player g)
@@ -252,34 +258,36 @@
 ;;;
 ;;; events
 ;;;
-(defn timeout
+(defn delayed-call
   "Call f, optionally with arguments xs, after ms milliseconds"
   [ms f & xs]
   (js/setTimeout #(apply f xs) ms))
 
-(defn get-ai-move [player] nil)
+(defn get-ai-move
+  "plan an ai move"
+  []
+  nil)
 
-(defn computer-turn
-  "play computer turn"
-  [g]
+(defn play-ai-turn
+  "play next ai move"
+  []
   (prn "play computer turn")
-  (get-ai-move :b))
+  (get-ai-move))
 
-(defn single-player-point
+(defn single-player-moved
   "make a move in single player mode"
   [g wps a-crosses b-crosses point]
 
-  (swap! history #(conj % [g wps]))
   (when (not (or (game-over? g wps) (game-drawn? g)))
     (claim-a-point a-crosses point))
 
   (let [newg @game]
     (when (not (or (game-over? newg wps) (game-drawn? newg)))
-      (timeout al-think-time #(->> newg
-                                   (computer-turn)
-                                   (claim-b-point b-crosses))))))
+      (delayed-call al-think-time (play-ai-turn)))))
 
-(defn change-players [count]
+(defn change-player-count
+  "change to 1-player or 2-player mode"
+  [count]
   (swap! game #(assoc %
                  :players count
                  :player :a
@@ -291,11 +299,11 @@
 
 (defn one-player [event]
   (.preventDefault event)
-  (change-players 1))
+  (change-player-count 1))
 
 (defn two-player [event]
   (.preventDefault event)
-  (change-players 2))
+  (change-player-count 2))
 
 (defn undo
   "undo button handler"
@@ -325,7 +333,7 @@
 
 (defn add-way-points
   "find dots traversed by line.
-  Include mid-points btween dots on diagonal lines.
+  Include mid-points between dots on diagonal lines.
   A zero slope-type means horizontal or vertical, else it's the line gradient
   Only 0, -1, 1 slope-types are allowed"
   [[[x1 y1] [x2 y2] :as [p1 p2]] slope-type]
@@ -419,8 +427,7 @@
   "handle a tap or click on a dot"
   [event]
   (let [g @game
-        svg (mouse->svg event)
-        dot (game->dot ((svg->game @game) svg))
+        dot (mouse->dot event)
         a-crosses (:a-crosses g)
         b-crosses (:b-crosses g)
         pl (:player g)
@@ -434,8 +441,8 @@
             (claim-point a-crosses b-crosses dot pl)
             ))
         (when (= pl :a)
-          (single-player-point g @w-points a-crosses b-crosses dot)))
-      (push-history! @game @w-points))))
+          (single-player-moved g @w-points a-crosses b-crosses dot)))
+      )))
 
 (defn handle-start-line
   "start dragging a line"
@@ -460,20 +467,16 @@
   "handle end of drag. Convert to a tap if not moved"
   [event]
   (.preventDefault event)
-  (let [svg (mouse->svg event)
-        g @game
+  (let [g @game
         [[draw-start _] started-at] @drag-line
         now (.now js/Date)
-        is-tap (< (- now started-at) 333)
-        dot (game->dot ((svg->game g) svg))
+        dot (mouse->dot event)
         line (canonical-line [draw-start dot])
         old-wps @w-points
         new-wps (new-way-points line)
         ]
-    (if is-tap
-      (handle-tap event)
-      (when new-wps
-        (when (not-any? new-wps old-wps)
+    (if new-wps
+      (when (not-any? new-wps old-wps)
           (let [line-key (if (= :a (:player g)) :a-lines :b-lines)
                 updated-lines (conj (line-key g) line)
                 new-player (if (= (:player g) :a) :b :a)]
@@ -481,7 +484,11 @@
                                 line-key updated-lines
                                 :player new-player))
             (reset! w-points (union old-wps new-wps))
-            (push-history! @game @w-points)))))
+            ))
+      (if (< (- now started-at) click-interval)
+        (handle-tap event)))
+
+    (push-history!)
     (reset! drag-line [nil 0])
     ))
 
