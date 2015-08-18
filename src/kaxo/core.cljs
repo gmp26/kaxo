@@ -94,7 +94,7 @@
 (defn on-js-reload
   "placeholder for development browser reloaded code"
   []
-(swap! game update-in [:__figwheel_counter] inc))
+  (swap! game update-in [:__figwheel_counter] inc))
 
 ;;;
 ;; history for undo-redo handling
@@ -163,8 +163,6 @@
 ;;
 ;; Game life cycle
 ;;
-(defn game-drawn? [g] false)
-
 (defn real-points-removed [wps]
   (filter (fn [[x y]] (and (integer? x) (integer? y))) wps))
 
@@ -185,17 +183,15 @@
   (let [pa (= (:player g) :a)
         gover (game-over? g wps)
         over-class (if gover " pulsed" "")]
-    (if (game-drawn? g)
-      :draw
-      (if (= (:players g) 1)
-        [over-class (cond
-                     (= gover :a) :al-win
-                     (= gover :b) :you-win
-                     :else (if pa :yours :als))]
-        [over-class (cond
-                     (= gover :a) :b-win
-                     (= gover :b) :a-win
-                     :else (if pa :as-turn :bs-turn))]))))
+    (if (= (:players g) 1)
+      [over-class (cond
+                    (= gover :a) :al-win
+                    (= gover :b) :you-win
+                    :else (if pa :yours :als))]
+      [over-class (cond
+                    (= gover :a) :b-win
+                    (= gover :b) :a-win
+                    :else (if pa :as-turn :bs-turn))])))
 
 (defn get-message [status]
   (status messages))
@@ -278,11 +274,11 @@
   "make a move in single player mode"
   [g wps a-crosses b-crosses point]
 
-  (when (not (or (game-over? g wps) (game-drawn? g)))
+  (when (not (game-over? g wps))
     (claim-a-point a-crosses point))
 
   (let [newg @game]
-    (when (not (or (game-over? newg wps) (game-drawn? newg)))
+    (when (not (game-over? newg wps))
       (delayed-call al-think-time (play-ai-turn)))))
 
 (defn change-player-count
