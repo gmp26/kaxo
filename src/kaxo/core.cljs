@@ -419,27 +419,6 @@
   [event]
   (game->dot ((svg->game @game) (mouse->svg event))))
 
-(defn handle-tap
-  "handle a tap or click on a dot"
-  [event]
-  (let [g @game
-        dot (mouse->dot event)
-        a-crosses (:a-crosses g)
-        b-crosses (:b-crosses g)
-        pl (:player g)
-        new-w-points (union @w-points #{dot})]
-    (do
-      (.preventDefault event)
-      (if (= (:players g) 2)
-        (when (not (@w-points dot))
-          (do
-            (reset! w-points new-w-points)
-            (claim-point a-crosses b-crosses dot pl)
-            ))
-        (when (= pl :a)
-          (single-player-moved g @w-points a-crosses b-crosses dot)))
-      )))
-
 (defn handle-start-line
   "start dragging a line"
   [event]
@@ -470,19 +449,30 @@
         line (canonical-line [draw-start dot])
         old-wps @w-points
         new-wps (new-way-points line)
+        pl (:player g)
         ]
     (if new-wps
-      (when (not-any? new-wps old-wps)
-          (let [line-key (if (= :a (:player g)) :a-lines :b-lines)
-                updated-lines (conj (line-key g) line)
-                new-player (if (= (:player g) :a) :b :a)]
-            (swap! game #(assoc %
-                                line-key updated-lines
-                                :player new-player))
-            (reset! w-points (union old-wps new-wps))
-            ))
-      (if (< (- now started-at) click-interval)
-        (handle-tap event)))
+      ;; we must have a candidate for a new line
+      (when (not-any? new-wps old-wps)   ;new line must not intersect old-wps
+        (let [line-key (if (= :a pl) :a-lines :b-lines)
+              updated-lines (conj (line-key g) line)
+              new-player (if (= pl :a) :b :a)]
+          (swap! game #(assoc %
+                              line-key updated-lines
+                              :player new-player))
+          (reset! w-points (union old-wps new-wps))))
+
+      ;; handle a possible tap or click on a dot
+      (when (< (- now started-at) click-interval)
+        (let [a-crosses (:a-crosses g)
+              b-crosses (:b-crosses g)
+              new-w-points (union @w-points #{dot})]
+          (do
+            (.preventDefault event)
+            (when (not (@w-points dot))
+              (reset! w-points new-w-points)
+              (claim-point a-crosses b-crosses dot pl))))
+        ))
 
     (push-history!)
     (reset! drag-line [nil 0])
