@@ -434,7 +434,6 @@
     (when dl
       (reset! drag-line [[drag-start drag-end] started-at]))))
 
-
 (defn end-of-turn!
   "Change player.
   Do this after a new game move"
@@ -446,6 +445,19 @@
     (push-history! g wps)
     (switch-player!)))
 
+(defn line->move
+  "create a move from a drag-line gesture"
+  [g wps line]
+  )
+
+(defn tap->move
+  "create a move from a dot click"
+  [g wps dot])
+
+(defn play-move
+  "play a move"
+  [g wps move]
+  )
 
 (defn handle-end-line
   "handle end of drag. Convert to a tap if not moved"
@@ -466,8 +478,7 @@
         (let [line-key (if (= :a pl) :a-lines :b-lines)
               updated-lines (conj (line-key g) line)
               ]
-          (swap! game #(assoc %
-                              line-key updated-lines))
+          (swap! game #(assoc % line-key updated-lines))
           (reset! w-points (union old-wps new-wps))
           (end-of-turn! pl)))
 
@@ -480,8 +491,9 @@
             (.preventDefault event)
             (when (not (@w-points dot))
               (reset! w-points new-w-points)
-              (claim-point a-crosses b-crosses dot pl))
-            (end-of-turn! pl)))))
+              (claim-point a-crosses b-crosses dot pl)
+              (end-of-turn! pl))
+            ))))
     (reset! drag-line [nil 0])
     ))
 
