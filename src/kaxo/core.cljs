@@ -420,7 +420,7 @@
   [event]
   (.preventDefault event)
   (let [svg (mouse->svg event)
-        dot (game->dot ((svg->game @game) svg))        ]
+        dot (game->dot ((svg->game @game) svg))]
     (reset! drag-line [[dot dot] (.now js/Date)])))
 
 (defn handle-move-line
@@ -435,31 +435,137 @@
       (reset! drag-line [[drag-start drag-end] started-at]))))
 
 (defn end-of-turn!
-  "Change player.
-  Do this after a new game move"
+  "Push game-state to history. Do this after a new game move"
   [pl]
   (let [g @game
         wps @w-points
-        [n log] @history
-        new-player (if (= pl :a) :b :a)]
-    (push-history! g wps)
-    (switch-player!)))
+        new-player (if (= :a pl) :b :a)
+        ]
+    (swap! game #(assoc % :player new-player))
+    (push-history! g wps)))
 
-(defn line->move
-  "create a move from a drag-line gesture"
-  [g wps line]
-  )
+;;
+;; Represent a move as a single point (tap) or double point (drag-line)
+;;
+(defn is-dot?
+  "if single dot return it, else nil"
+  [dot]
+  (when (vector? dot)
+    (let [[x y] dot]
+      (when (and (integer? x) (integer? y)) [x y]))))
+
+(defn dot-move?
+  "if the move is a single dot return it, else nil"
+  [dot]
+  (is-dot? dot))
+
+(defn line-move?
+  "If the move is a line return it, else nil"
+  [line]
+  (when (vector? line)
+    (let [[p1 p2] line]
+      (when (and  (vector? p1) (vector? p2))
+        (let [[p1' p2'] (canonical-line line)]
+          (when (not= p1' p2') [p1' p2']))))))
+
+;;;
+;; We'd like to be able to compose moves
+;;;
+(defn drag->move
+  "create a valid move from a drag-line gesture"
+  [wps drawn-line]
+
+  (let [line (canonical-line drawn-line)
+        new-wps (new-way-points line)]
+    (when (not-any? new-wps wps)
+      [new-wps line])))
 
 (defn tap->move
-  "create a move from a dot click"
-  [g wps dot])
+  "create a valid move from a dot tap"
+  [wps tapped-dot]
+  (when (not (wps tapped-dot))
+    [(union wps #{tapped-dot}) tapped-dot]))
+
+(defn play-line-move
+  "play a drag-line move"
+  [game-state line]
+  (when-let [[g wps] game-state]
+    (let [new-wps (new-way-points line)]
+      (when (not-any? new-wps wps)  ;ignore interecting lines
+        (let  [pl (:player g)
+               line-key (if (= :a pl) :a-lines :b-lines)
+               updated-lines (conj (line-key g) line)]
+          (prn (str "line-move " line))
+          [(assoc g line-key updated-lines :player (if (= :a pl) :b :a)) (union wps new-wps)])))))
+
+(defn play-dot-move
+  "play a tap on dot"
+  [[g wps :as game-state] dot]
+  (let [a-crosses (:a-crosses g)
+        b-crosses (:b-crosses g)]
+    (when (and (not (a-crosses dot)) (not (b-crosses dot)) (not (wps dot)))
+      (let [pl (:player g)
+            [key crosses new-player] (if (= :a pl)
+                            [:a-crosses a-crosses :b]
+                            [:b-crosses b-crosses :a])
+            g' (assoc g key (conj crosses dot) :player new-player)
+            wps' (union wps #{dot})]
+        (prn (str "dot-move" dot))
+        [g' wps']))))
 
 (defn play-move
   "play a move"
-  [g wps move]
+  [game-state move]
+  (cond
+    (line-move? move) (play-line-move game-state move)
+    (dot-move? move) (play-dot-move game-state move)
+    :else nil
+    ))
+
+(defn play-moves
+  "play a sequence of moves"
+  [game-state moves]
+  (reduce #(play-move %1 %2) game-state moves)
   )
 
 (defn handle-end-line
+  "handle end of drag. Convert to a tap if not moved"
+  [event]
+  (.preventDefault event)
+  (let [g @game
+        wps @w-points
+        [[draw-start _] started-at] @drag-line
+        now (.now js/Date)
+        dot (mouse->dot event)
+        line (canonical-line [draw-start dot])
+        new-wps (new-way-points line)
+        pl (:player g)
+        ]
+    (let [game-state (cond
+
+                       ;; handle possible drag-line
+                       (line-move? line)
+                       (play-line-move [g wps] line)
+
+                       ;; handle possible tap or click
+                       (dot-move? dot)
+                       (if (< (- now started-at) click-interval)
+                         (play-dot-move [g wps] dot)
+                         nil)
+
+                       :else nil)]
+
+
+      (when game-state
+        (let [[g' wps'] game-state]
+          (reset! game g')
+          (reset! w-points wps')
+          (push-history! g' wps')))
+      )
+    (reset! drag-line [nil 0])))
+
+
+#_(defn handle-end-line
   "handle end of drag. Convert to a tap if not moved"
   [event]
   (.preventDefault event)
