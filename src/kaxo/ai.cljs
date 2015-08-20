@@ -25,18 +25,19 @@
  (and (<= (Math.abs (- x1 x2)) 1) (<= (Math.abs (- y1 y2)) 1))
  )
 
-#_(defn dot-partition
-  [n wps dot dots]
+(defn set-adjacent?
+  "determine whether a dot is adjacent to neighbours"
+  [neighbours dot]
+  (some #(adjacent? % dot) neighbours))
+
+(defn dot-partition
+  [n wps dot]
   (loop [neighbours #{dot}
          remotes (remaining-dots n wps)]
-
-
-
-    recur))
-
-
-
-
+    (let [[neighbours' remotes' :as result] (split-with #(set-adjacent? neighbours %) remotes)]
+      (if (= neighbours neighbours')
+        result
+        (recur neighbours' remotes')))))
 
 (defn get-ai-move
   "plan an ai move"
