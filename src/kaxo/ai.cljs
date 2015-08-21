@@ -38,8 +38,8 @@
   [area wps dot]
   (loop [neighbours #{dot}
          boundary (get-boundary area wps neighbours dot)]
-    (prn "  neighbours " neighbours)
-    (prn "  boundary " boundary)
+    #_(prn "  neighbours " neighbours)
+    #_(prn "  boundary " boundary)
     (if (empty? boundary)
       neighbours
       (let [candidate (first boundary)
@@ -54,8 +54,8 @@
   (let [space (remaining-dots n wps)]
     (loop [regions []
            remaining space]
-      (prn "regions " regions)
-      (prn "remaining " remaining)
+      #_(prn "regions " regions)
+      #_(prn "remaining " remaining)
       (if (empty? remaining)
         regions
         (let [dot (first remaining)
@@ -63,7 +63,84 @@
               space-left (difference remaining region)]
           (recur (conj regions region) space-left))))))
 
+(defn random-move
+  "pick a random valid move from a region"
+  [regions]
+  (rand-nth (seq (rand-nth regions)))
+  )
+
+(defn dimensions
+  "calculate the dimensions of a region"
+  [region]
+  (let [xs (map #(first %) region)
+        ys (map #(second %) region)
+        min-x (apply min xs)
+        max-x (apply max xs)
+        min-y (apply min ys)
+        max-y (apply max ys)
+        ]
+    (map inc [(- max-x min-x) (- max-y min-y)])))
+
+(def nim-limit 4)
+
+#_(defn nimber
+  "calculate (or estimate) the nimber of a region"
+  [region]
+  (let [c (count region)
+        [w h] (dimensions region)])
+  (cond
+    ;; lines
+    (or
+        (= w 1) ; vertical line
+        (= h 1) ; horizontal line
+        (not-any? (fn [[x y] (not= (- x) y)]) region) ; +1 slope
+        (not-any? (fn [[x y] (not= (- x) y)]) region) ; -1 slope
+        ) c
+
+    ;; rectangles ?
+    (= c (* w h)) 0
+
+    (= c 3) 0
+
+    :else c ; c is an upper bound on true nimber
+    )
+  )
+
+(defn nimber
+  "place-holder for testing - pretends every region is a simple row"
+  [region]
+  (count region))
+
+(defn nimsum
+  "find the nimsum of some nimbers"
+  [nimbers]
+  (reduce bit-xor nimbers))
+
+(defn odd-single-count?
+  "returns the count of regions with a nimber of 1"
+  [nimbers]
+  (odd? (count (filter #(= 1 %) nimbers))))
+
+(defn n-position?
+  "is the position a win for the next player?"
+  [nimbers misere]
+  (if (and misere (not-any? #(> 1 %) nimbers))
+    (odd-single-count? nimbers)
+    (= 0 (nimsum nimbers))))
+
+(defn p-position?
+  "is the position a win for the previous player?"
+  [nimbers misere]
+  (complement n-position?))
+
 (defn get-ai-move
   "plan an ai move"
   []
-  nil)
+  (prn "get-ai-move")
+  (let [g @k/game
+        n (:n g)
+        wps @k/w-points
+        regions' (regions n wps)]
+    (prn regions')
+
+    (random-move regions')))

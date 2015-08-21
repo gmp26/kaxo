@@ -13,12 +13,14 @@
                                  initial-history
                                  game-over?
                                  get-status
+                                 as-turn?
                                  canonical-line
                                  new-way-points
                                  line-move?
                                  dot-move?
                                  play-line-move
                                  play-dot-move
+                                 play-move
                                  )]
               [kaxo.ai :as ai]
               ))
@@ -145,9 +147,6 @@
         new-n (if (> old-n min-n) (- old-n 1) min-n)]
     (resize-game-board! new-n)))
 
-;;;
-;; reset game
-;;;
 (defn reset-game
   ([]
    (swap! game #(assoc % :player :a
@@ -164,6 +163,12 @@
   ([event _]
    (reset-game event)))
 
+(defn commit-move
+  "Once a move has been completed, change the game state"
+  [[g wps :as game-state]]
+  (reset! game g)
+  (reset! w-points wps)
+  (push-history! g wps))
 ;;;
 ;; ai turn
 ;;;
@@ -172,27 +177,23 @@
   [ms f & xs]
   (js/setTimeout #(apply f xs) ms))
 
+(defn ai-turn?
+  "Is it time for the ai to play?. Call this after player switch"
+  [g wps]
+  (and (not (game-over? g wps)) (= 1 (:players g)) (= (:player g) :b)))
+
 (defn play-ai-turn
   "play next ai move"
   []
   (prn "play computer turn")
-  (ai/get-ai-move))
+  (commit-move (play-move [@game @w-points] (ai/get-ai-move))))
 
-(defn ai-turn?
-  "Is it time for the ai to play?. Call this after player switch"
-  [g wps pl]
-  (and (not (game-over? g wps)) (= 1 (:players g)) (= :b pl)))
-
-(defn switch-player!
-  "switch player after a move"
+(defn schedule-ai-turn
+  "schedule an ai play after a suitable delay"
   []
-  (let [g @game
-        wps @w-points
-        new-pl (if (= (:player g) :a) :b :a)]
-    (prn "switch player")
-    (swap! game #(assoc % :player new-pl))
-    (when (ai-turn? g wps new-pl)
-      (delayed-call al-think-time (play-ai-turn)))))
+
+  (prn "schedule ai turn")
+  (delayed-call al-think-time play-ai-turn))
 
 ;;;
 ;; ui button events
@@ -297,10 +298,13 @@
 (defn handle-start-line
   "start dragging a line"
   [event]
-  (.preventDefault event)
-  (let [svg (mouse->svg event)
-        dot (game->dot ((svg->game @game) svg))]
-    (reset! drag-line [[dot dot] (.now js/Date)])))
+  (let [g @game
+        wps @w-points]
+    (if (as-turn? g wps)
+      (.preventDefault event)
+      (let [svg (mouse->svg event)
+            dot (game->dot ((svg->game g) svg))]
+        (reset! drag-line [[dot dot] (.now js/Date)])))))
 
 (defn handle-move-line
   "continue dragging a line"
@@ -313,7 +317,7 @@
     (when dl
       (reset! drag-line [[drag-start drag-end] started-at]))))
 
-(defn end-of-turn!
+#_(defn end-of-turn!
   "Push game-state to history. Do this after a new game move"
   [pl]
   (let [g @game
@@ -351,11 +355,11 @@
                        :else nil)]
 
 
-      (when game-state
-        (let [[g' wps'] game-state]
-          (reset! game g')
-          (reset! w-points wps')
-          (push-history! g' wps')))
+      (when game-state (commit-move game-state))
+
+      (when (ai-turn? @game @w-points)
+        (schedule-ai-turn))
+
       )
     (reset! drag-line [nil 0])))
 
@@ -456,6 +460,8 @@
          :on-touch-end handle-end-line
          }
    (let [n (:n g)]
+     (prn "g = " g)
+     (prn "n = " n)
      [:g {:id "box" :transform (str "scale(" (* 1 (/ scale-n n)) ")")}
       (for [x (range n)]
         (for [y (range n)]
@@ -576,7 +582,7 @@
   ;; mount main component on html game element
   (r/mount (game-container) (el "game"))
 
-  (reset-game)
+  #_(reset-game)  ; breaks figwheel reload, probably not needed anyway.
   )
 
 (initialise)
