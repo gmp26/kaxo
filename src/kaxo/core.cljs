@@ -40,7 +40,7 @@
 (defonce drag-line (atom [nil 0]))
 (defonce w-points (atom #{}))
 (defonce history (atom initial-history))
-
+(defonce hu-invariants (atom []))
 ;;;
 ;; unused
 ;;;

@@ -21,8 +21,10 @@
                                  play-line-move
                                  play-dot-move
                                  play-move
+                                 hu-invariants
                                  )]
               [kaxo.ai :as ai]
+              [kaxo.hum :as hum]
               ))
 
 (def messages {:yours "Your turn"
@@ -168,7 +170,9 @@
   [[g wps :as game-state]]
   (reset! game g)
   (reset! w-points wps)
-  (push-history! g wps))
+  (push-history! g wps)
+  (reset! hu-invariants (map hum/hu-moments (ai/regions (:n g) wps)))
+  )
 ;;;
 ;; ai turn
 ;;;
@@ -479,10 +483,11 @@
   "heads up game state display"
   [:div {:class "debug"}
    [:p {:key "b1"} (str g)]
-   [:p {:key "b2"} (str "drag "(r/react drag-line))]
+   #_[:p {:key "b2"} (str "drag "(r/react drag-line))]
    [:p {:key "b3"} (str "w-points " (r/react w-points))]
-   [:p {:key "b5"} (str "hist " (r/react history))]
-])
+   #_[:p {:key "b5"} (str "hist " (r/react history))]
+   [:p {:key "b6"} (str "hu invariants" (r/react hu-invariants))]
+   ])
 
 (r/defc tool-bar
   "render top toolbar"

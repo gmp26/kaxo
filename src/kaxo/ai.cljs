@@ -1,6 +1,7 @@
 (ns ^:figwheel-always kaxo.ai
   "ai game play for kaxo"
   (:require [kaxo.core :as k]
+            [kaxo.hum :as hum]
             [clojure.set :refer (union difference)]))
 
 (defn initial-dots
@@ -63,53 +64,103 @@
               space-left (difference remaining region)]
           (recur (conj regions region) space-left))))))
 
+;;;
+;; To find a good move we need a way to represent the shape of a region, no matter how
+;; it is positioned or orientated in the grid.
+;; But how?
+;;;
+
 (defn random-move
   "pick a random valid move from a region"
   [regions]
   (rand-nth (seq (rand-nth regions)))
   )
 
-(defn dimensions
-  "calculate the dimensions of a region"
-  [region]
-  (let [xs (map #(first %) region)
-        ys (map #(second %) region)
-        min-x (apply min xs)
-        max-x (apply max xs)
-        min-y (apply min ys)
-        max-y (apply max ys)
-        ]
-    (map inc [(- max-x min-x) (- max-y min-y)])))
-
+;;;
+;; Nimber calculations
+;;;
 (def nim-limit 4)
 
-#_(defn nimber
-  "calculate (or estimate) the nimber of a region"
-  [region]
-  (let [c (count region)
-        [w h] (dimensions region)])
-  (cond
-    ;; lines
-    (or
-        (= w 1) ; vertical line
-        (= h 1) ; horizontal line
-        (not-any? (fn [[x y] (not= (- x) y)]) region) ; +1 slope
-        (not-any? (fn [[x y] (not= (- x) y)]) region) ; -1 slope
-        ) c
+;; (if (or ; lines
+;;       (= w 1) ; vertical line
+;;       (= h 1) ; horizontal line
+;;       (not-any? (fn [[x y] (not= x y)]) region) ; +1 slope
+;;       (not-any? (fn [[x y] (not= (- x) y)]) region) ; -1 slope
+;;       )
+;;   c)
 
-    ;; rectangles ?
-    (= c (* w h)) 0
-
-    (= c 3) 0
-
-    :else c ; c is an upper bound on true nimber
-    )
-  )
-
-(defn nimber
+(defn default-nimber
   "place-holder for testing - pretends every region is a simple row"
   [region]
   (count region))
+
+(def shape-nimbers
+  {;; 1 x 1
+   "0.000 0.000" 1 ;; single dot
+   ;; 2 x 1
+   "0.5000 0.2500" 2 ;; 2-line (h/v)
+   ;; 2 x 2
+   "1.333 0.4444" 0 ;; el
+   "2.000 0.000" 1 ;; square
+   "1.000 1.000" 2 ;; diagonal
+   ;; 3 x 1
+   "2.000 4.000" 3 ;; 3-line h/v
+   ;; 3 x 2
+   "3.000 5.000" 1 ;; zed
+   "5.500 6.250" 2 ;; solid rect, also 3 x 3 lambda
+   "2.750 1.563" 2 ;; Tee (triangle hypoteneuse as base)
+   "4.000 4.000" 5 ;; 3 x 2 child's chair
+   "2.667 5.778" 0 ;; sledge ????
+   "3.750 4.063" 1 ;; comma
+   "3.500 6.250" 4 ;; el
+   "2.667 1.778" 3 ;; chevron
+   "5.200 7.840" 2 ;; square bracket
+   ;; 3 x 3
+   "6.400 12.96" 1 ;; el
+   "4.750 0.5625" 2 ;; Y
+   "5.600 0.1600" 2 ;; glider1
+   "6.800 5.440" 2 ;; push-chair
+   "8.000 0.000" 2 ;; 5 die
+   "5.500 20.25" 3 ;; 3 x 3 funnel
+   "4.750 16.56" 4 ;; lawn mower
+   "5.200 1.440" 5 ;; Tee
+   "4.000 16.00" 2 ;; diagonal
+   "6.000 0.8000" 4 ;; glider2
+   "4.750 4.563" 1 ;; jay hook
+   "4.800 4.640" 2 ;; glider 3
+   "6.667 11.11" 1 ;; triangle 0 2 4 5
+   "5.667 2.778" nil ;; speed boat - way points needed
+   "5.600 2.560" nil ;; 3 x 3 boat - 3 variants of this depending on w-points
+   "9.714 0.08163" nil ;; arrow 0 1 2 3
+   ;; 4 x 1
+   "5.000 25.00" 4 ;; 4-line h/v
+   ;; 4 x 2
+   "6.000 20.00" 1 ;; 4 x 2 caterpillar
+   "8.167 37.36" 3 ;; 4 x 2 high back chair
+   "7.600 41.76" 5 ;; 4 x 2 el
+   ;; 4 x 3
+   "11.50 56.25" 6 ;; el
+   ;; 4 x 4
+   "17.71 105.8" 0 ;; el
+
+   "10.00 100.0" 5 ;; 5-line h/v
+   "19.43 217.5" 0 ;; 5 x 3 el
+   "14.17 167.4" 3 ;; 5 x 2 el
+   "4.000 0.000" nil ;; open 3 x 3 plus - 2 variants
+   "12.00 0.000" nil ;; 3 x 3 square
+   "40.00 400.0" nil ;; 3 x 5 rect
+   "65.00 225.0" nil ;; 4 x 5 rect
+   })
+
+
+(defn nimber
+  "calculate (or estimate) the nimber of a region"
+  [region]
+  (let [area (count region)
+        shape (hum/hu-moments region)])
+
+  (default-nimber region)
+  )
 
 (defn nimsum
   "find the nimsum of some nimbers"
