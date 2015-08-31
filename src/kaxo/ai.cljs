@@ -147,7 +147,7 @@
    "19.43 217.5" 0 ;; 5 x 3 el
    "14.17 167.4" 3 ;; 5 x 2 el
    "4.000 0.000" nil ;; open 3 x 3 plus - 2 variants
-   "12.00 0.000" nil ;; 3 x 3 square
+   "12.00 0.000" nil ;; 3 x 3 square - children have variants
    "40.00 400.0" nil ;; 3 x 5 rect
    "65.00 225.0" nil ;; 4 x 5 rect
    })
