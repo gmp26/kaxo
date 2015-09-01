@@ -5,10 +5,9 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies [[org.clojure/clojure "1.7.0"]
-                 [org.clojure/clojurescript "0.0-3297"]
+                 [org.clojure/clojurescript "1.7.48"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
-                 [rum "0.2.7"]
-                 [jayq "2.5.4"]]
+                 [rum "0.3.0"]]
 
   :plugins [[lein-cljsbuild "1.0.5"]
             [lein-figwheel "0.3.5"]]
@@ -27,12 +26,17 @@
                          :asset-path "js/compiled/out"
                          :output-to "resources/public/js/compiled/kaxo.js"
                          :output-dir "resources/public/js/compiled/out"
+                         :warnings  {:single-segment-namespace false }
                          :source-map-timestamp true }}
              {:id "min"
               :source-paths ["src"]
-              :compiler {:output-to "resources/public/js/compiled/kaxo.js"
-                         :main kaxo.core
+              :compiler {:main kaxo.main
+                         :externs ["resources/externs/svg.js"]
+                         :output-to "resources/public/js/compiled/kaxo.js"
+                         :asset-path "js/compiled/prod"
+                         :output-dir "resources/public/js/compiled/prod"
                          :optimizations :advanced
+                         :warnings {:single-segment-namespace false}
                          :pretty-print false}}]}
 
   :figwheel {
