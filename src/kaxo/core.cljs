@@ -10,10 +10,10 @@
 (defn deb
   "print and return value"
   ([x]
-   (prn x) x)
+   #_(prn x) x)
 
   ([s x]
-   (prn (str s x)) x))
+   #_(prn (str s x)) x))
 
 (defn el [id] (.getElementById js/document id))
 
@@ -147,10 +147,14 @@
   "If the move is a line return it, else nil"
   [line]
   (when (vector? line)
-    (let [[p1 p2] line]
+    (let [[p1 p2] line
+          n (:n @game)]
       (when (and  (vector? p1) (vector? p2))
-        (let [[p1' p2'] (canonical-line line)]
-          (when (not= p1' p2') [p1' p2']))))))
+        (let [[[x1 y1 :as p1'] [x2 y2 :as p2']] (canonical-line line)]
+          (when (and (not= p1' p2')
+                     (>= x1 0) (>= y1 0) (< x1 n) (< y1 n)
+                     (>= x2 0) (>= y2 0) (< x2 n) (< y2 n))
+            [p1' p2']))))))
 
 ;;;
 ;; We'd like to be able to compose moves
@@ -164,7 +168,7 @@
         (let  [pl (:player g)
                line-key (if (= :a pl) :a-lines :b-lines)
                updated-lines (conj (line-key g) line)]
-          (prn (str "line-move " line))
+          #_(prn (str "line-move " line))
           [(assoc g line-key updated-lines :player (if (= :a pl) :b :a)) (union wps new-wps)])))))
 
 (defn play-dot-move
@@ -179,7 +183,7 @@
                             [:b-crosses b-crosses :a])
             g' (assoc g key (conj crosses dot) :player new-player)
             wps' (union wps #{dot})]
-        (prn (str "dot-move" dot))
+        #_(prn (str "dot-move" dot))
         [g' wps']))))
 
 (defn play-move

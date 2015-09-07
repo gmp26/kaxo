@@ -12,18 +12,22 @@ body {
 }
 
 .dot {
+    pointer-events: none;
     stroke: #e0f0e8;
     opacity: 0.8;
     cursor: pointer;
 }
 
 .dot.claimed {
-    pointer-events: none;
 }
 
 .dot:hover {
     opacity: 1;
     stroke: #ddddee;
+}
+
+.line {
+    pointer-events: none;
 }
 
 .status {
@@ -99,7 +103,7 @@ body {
     position: absolute;
 }
 
-@-webkit-keyframes pulse {
+@-webkit-keyframes webkit-pulse {
   from {
       font-size: 1em;
       opacity: 0.75;
@@ -130,12 +134,14 @@ body {
 }
 
 .pulsed {
-    -webkit-animation-name: pulse;
+
+    /*-webkit-animation-name: webkit-pulse; */
             animation-name: pulse;
-    -webkit-animation-duration: 0.5s;
+    /* -webkit-animation-duration: 0.5s; */
             animation-duration: 0.5s;
-    -webkit-animation-iteration-count: 5;
+    /* -webkit-animation-iteration-count: 5; */
             animation-iteration-count: 5;
+*/
 }
 
 

@@ -171,7 +171,7 @@
   (reset! game g)
   (reset! w-points wps)
   (push-history! g wps)
-  (reset! hu-invariants (map hum/hu-moments (ai/regions (:n g) wps)))
+  #_(reset! hu-invariants (map hum/hu-moments (ai/regions (:n g) wps)))
   )
 ;;;
 ;; ai turn
@@ -189,14 +189,14 @@
 (defn play-ai-turn
   "play next ai move"
   []
-  (prn "play computer turn")
+  #_(prn "play computer turn")
   (commit-move (play-move [@game @w-points] (ai/get-ai-move))))
 
 (defn schedule-ai-turn
   "schedule an ai play after a suitable delay"
   []
 
-  (prn "schedule ai turn")
+  #_(prn "schedule ai turn")
   (delayed-call al-think-time play-ai-turn))
 
 ;;;
@@ -348,7 +348,9 @@
 
                        ;; handle possible drag-line
                        (line-move? line)
-                       (play-line-move [g wps] line)
+                       (do
+                         #_(prn (str "line move " line))
+                         (play-line-move [g wps] line))
 
                        ;; handle possible tap or click
                        (dot-move? dot)
@@ -394,7 +396,8 @@
     ; preventing clicks/taps there.
     (when (not= p1 p2)
       (do
-        [:line {:stroke-linecap "round"
+        [:line {:class "line"
+                :stroke-linecap "round"
                 :stroke ((:player g) colours)
                 :stroke-width 7
                 :style {:cursor "crosshair"}
@@ -404,7 +407,8 @@
                 :y2 (gaps y2)}]))))
 
 (r/defc render-line [g player [[x1 y1] [x2 y2] :as line]]
-  [:line {:stroke-linecap "round"
+  [:line {:class "line"
+          :stroke-linecap "round"
           :stroke (line-colour g line)
           :stroke-width 7
           :x1 (gaps x1)
@@ -450,6 +454,13 @@
               :key (str "[" x " " y "]")
               }]))
 
+(defn handle-out
+  "mouse-out"
+  [event]
+  (.log js/console  event)
+  (reset! drag-line [nil 0]))
+
+
 (r/defc svg-grid < r/reactive [g]
   [:svg {:view-box (str "0 0 " viewport-width " " viewport-height)
          :height "100%"
@@ -458,14 +469,15 @@
          :id "grid"
          :on-mouse-down handle-start-line
          :on-mouse-move handle-move-line
+         :on-mouse-out handle-out
          :on-mouse-up handle-end-line
          :on-touch-start handle-start-line
          :on-touch-move handle-move-line
          :on-touch-end handle-end-line
          }
    (let [n (:n g)]
-     (prn "g = " g)
-     (prn "n = " n)
+     #_(prn "g = " g)
+     #_(prn "n = " n)
      [:g {:id "box" :transform (str "scale(" (* 1 (/ scale-n n)) ")")}
       (for [x (range n)]
         (for [y (range n)]
@@ -579,7 +591,7 @@
       (status-bar g wps)]
      (svg-grid g)
      (footer)
-     (debug-game g)]))
+     #_(debug-game g)]))
 
 (defn initialise []
   (.initializeTouchEvents js/React true)
