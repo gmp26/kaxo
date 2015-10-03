@@ -13,7 +13,6 @@
                                  initial-history
                                  game-over?
                                  get-status
-                                 as-turn?
                                  canonical-line
                                  new-way-points
                                  line-move?
@@ -186,6 +185,12 @@
   [g wps]
   (and (not (game-over? g wps)) (= 1 (:players g)) (= (:player g) :b)))
 
+
+(defn player-can-move?
+  "Can a player move?"
+  [g wps]
+  (not (or (ai-turn? g wps) (game-over? g wps))))
+
 (defn play-ai-turn
   "play next ai move"
   []
@@ -304,7 +309,7 @@
   [event]
   (let [g @game
         wps @w-points]
-    (if (not (ai-turn? g wps))
+    (if (player-can-move? g wps)
       (let [svg (mouse->svg event)
             dot (game->dot ((svg->game g) svg))]
         (reset! drag-line [[dot dot] (.now js/Date)]))
@@ -335,7 +340,7 @@
         new-wps (new-way-points line)
         pl (:player g)
         ]
-    (when (not (ai-turn? g wps))
+    (when (player-can-move? g wps)
       (let [game-state (cond
 
                          ;; handle possible drag-line

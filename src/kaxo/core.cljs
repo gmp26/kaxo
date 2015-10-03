@@ -83,13 +83,6 @@
                     (= gover :b) :a-win
                     :else (if pa :as-turn :bs-turn))])))
 
-(defn as-turn?
-  "Is computer moving, blocking player a from moving?"
-  [g wps]
-  (let [status (second (get-status g wps))]
-    (or (= status :yours) (= status :as-turn)))
-  )
-
 ;;;
 ;; new line utilities (for on-drag)
 ;;;
