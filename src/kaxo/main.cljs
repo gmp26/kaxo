@@ -321,16 +321,6 @@
     (when dl
       (reset! drag-line [[drag-start drag-end] started-at]))))
 
-#_(defn end-of-turn!
-  "Push game-state to history. Do this after a new game move"
-  [pl]
-  (let [g @game
-        wps @w-points
-        new-player (if (= :a pl) :b :a)
-        ]
-    (swap! game #(assoc % :player new-player))
-    (push-history! g wps)))
-
 (defn handle-end-line
   "handle end of drag. Convert to a tap if not moved"
   [event]

@@ -187,11 +187,11 @@
 (defn get-ai-move
   "plan an ai move"
   []
-  (prn "get-ai-move")
+  #_(prn "get-ai-move")
   (let [g @k/game
         n (:n g)
         wps @k/w-points
         regions' (regions n wps)]
-    (prn regions')
+    #_(prn regions')
 
     (random-move regions')))
