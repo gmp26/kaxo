@@ -86,7 +86,7 @@
 (defn as-turn?
   "Is computer moving, blocking player a from moving?"
   [g wps]
-  (let [status (get-status g wps)]
+  (let [status (second (get-status g wps))]
     (or (= status :yours) (= status :as-turn)))
   )
 
@@ -164,7 +164,7 @@
   [game-state line]
   (when-let [[g wps] game-state]
     (let [new-wps (new-way-points line)]
-      (prn new-wps)
+      #_(prn new-wps)
       (when (and (not= new-wps :invalid) (not-any? new-wps wps)) ;ignore interecting lines
         (let  [pl (:player g)
                line-key (if (= :a pl) :a-lines :b-lines)

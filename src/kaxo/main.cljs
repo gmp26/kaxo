@@ -304,11 +304,12 @@
   [event]
   (let [g @game
         wps @w-points]
-    (if (as-turn? g wps)
-      (.preventDefault event)
+    (if (not (ai-turn? g wps))
       (let [svg (mouse->svg event)
             dot (game->dot ((svg->game g) svg))]
-        (reset! drag-line [[dot dot] (.now js/Date)])))))
+        (reset! drag-line [[dot dot] (.now js/Date)]))
+      (.preventDefault event)
+      )))
 
 (defn handle-move-line
   "continue dragging a line"
@@ -334,29 +335,30 @@
         new-wps (new-way-points line)
         pl (:player g)
         ]
-    (let [game-state (cond
+    (when (not (ai-turn? g wps))
+      (let [game-state (cond
 
-                       ;; handle possible drag-line
-                       (line-move? line)
-                       (do
-                         #_(prn (str "line move " line))
-                         (play-line-move [g wps] line))
+                         ;; handle possible drag-line
+                         (line-move? line)
+                         (do
+                           #_(prn (str "line move " line))
+                           (play-line-move [g wps] line))
 
-                       ;; handle possible tap or click
-                       (dot-move? dot)
-                       (if (< (- now started-at) click-interval)
-                         (play-dot-move [g wps] dot)
-                         nil)
+                         ;; handle possible tap or click
+                         (dot-move? dot)
+                         (if (< (- now started-at) click-interval)
+                           (play-dot-move [g wps] dot)
+                           nil)
 
-                       :else nil)]
+                         :else nil)]
 
 
-      (when game-state (commit-move game-state))
+        (when game-state (commit-move game-state))
 
-      (when (ai-turn? @game @w-points)
-        (schedule-ai-turn))
+        (when (ai-turn? @game @w-points)
+          (schedule-ai-turn))
 
-      )
+        ))
     (reset! drag-line [nil 0])))
 
 
@@ -447,7 +449,7 @@
 (defn handle-out
   "mouse-out"
   [event]
-  (.log js/console  event)
+  #_(.log js/console  event)
   (reset! drag-line [nil 0]))
 
 
