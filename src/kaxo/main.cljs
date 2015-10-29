@@ -13,7 +13,6 @@
                                  initial-history
                                  game-over?
                                  get-status
-                                 as-turn?
                                  canonical-line
                                  new-way-points
                                  line-move?
@@ -186,6 +185,12 @@
   [g wps]
   (and (not (game-over? g wps)) (= 1 (:players g)) (= (:player g) :b)))
 
+
+(defn player-can-move?
+  "Can a player move?"
+  [g wps]
+  (not (or (ai-turn? g wps) (game-over? g wps))))
+
 (defn play-ai-turn
   "play next ai move"
   []
@@ -304,11 +309,12 @@
   [event]
   (let [g @game
         wps @w-points]
-    (if (as-turn? g wps)
-      (.preventDefault event)
+    (if (player-can-move? g wps)
       (let [svg (mouse->svg event)
             dot (game->dot ((svg->game g) svg))]
-        (reset! drag-line [[dot dot] (.now js/Date)])))))
+        (reset! drag-line [[dot dot] (.now js/Date)]))
+      (.preventDefault event)
+      )))
 
 (defn handle-move-line
   "continue dragging a line"
@@ -320,16 +326,6 @@
         drag-end ((svg->game g) svg)]
     (when dl
       (reset! drag-line [[drag-start drag-end] started-at]))))
-
-#_(defn end-of-turn!
-  "Push game-state to history. Do this after a new game move"
-  [pl]
-  (let [g @game
-        wps @w-points
-        new-player (if (= :a pl) :b :a)
-        ]
-    (swap! game #(assoc % :player new-player))
-    (push-history! g wps)))
 
 (defn handle-end-line
   "handle end of drag. Convert to a tap if not moved"
@@ -344,29 +340,30 @@
         new-wps (new-way-points line)
         pl (:player g)
         ]
-    (let [game-state (cond
+    (when (player-can-move? g wps)
+      (let [game-state (cond
 
-                       ;; handle possible drag-line
-                       (line-move? line)
-                       (do
-                         #_(prn (str "line move " line))
-                         (play-line-move [g wps] line))
+                         ;; handle possible drag-line
+                         (line-move? line)
+                         (do
+                           #_(prn (str "line move " line))
+                           (play-line-move [g wps] line))
 
-                       ;; handle possible tap or click
-                       (dot-move? dot)
-                       (if (< (- now started-at) click-interval)
-                         (play-dot-move [g wps] dot)
-                         nil)
+                         ;; handle possible tap or click
+                         (dot-move? dot)
+                         (if (< (- now started-at) click-interval)
+                           (play-dot-move [g wps] dot)
+                           nil)
 
-                       :else nil)]
+                         :else nil)]
 
 
-      (when game-state (commit-move game-state))
+        (when game-state (commit-move game-state))
 
-      (when (ai-turn? @game @w-points)
-        (schedule-ai-turn))
+        (when (ai-turn? @game @w-points)
+          (schedule-ai-turn))
 
-      )
+        ))
     (reset! drag-line [nil 0])))
 
 
@@ -457,7 +454,7 @@
 (defn handle-out
   "mouse-out"
   [event]
-  (.log js/console  event)
+  #_(.log js/console  event)
   (reset! drag-line [nil 0]))
 
 

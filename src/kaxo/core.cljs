@@ -83,13 +83,6 @@
                     (= gover :b) :a-win
                     :else (if pa :as-turn :bs-turn))])))
 
-(defn as-turn?
-  "Is computer moving, blocking player a from moving?"
-  [g wps]
-  (let [status (get-status g wps)]
-    (or (= status :yours) (= status :as-turn)))
-  )
-
 ;;;
 ;; new line utilities (for on-drag)
 ;;;
@@ -129,7 +122,7 @@
        (= 0 dy) (add-way-points p 0)
        (= dx dy) (add-way-points p 1)
        (= dx (- dy)) (add-way-points p -1)
-       :else nil))))
+       :else :invalid))))
 
 ;;;
 ;; Represent a move as a single point (tap) or double point (drag-line)
@@ -164,7 +157,8 @@
   [game-state line]
   (when-let [[g wps] game-state]
     (let [new-wps (new-way-points line)]
-      (when (not-any? new-wps wps)  ;ignore interecting lines
+      #_(prn new-wps)
+      (when (and (not= new-wps :invalid) (not-any? new-wps wps)) ;ignore interecting lines
         (let  [pl (:player g)
                line-key (if (= :a pl) :a-lines :b-lines)
                updated-lines (conj (line-key g) line)]
