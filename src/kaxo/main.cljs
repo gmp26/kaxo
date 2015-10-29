@@ -52,7 +52,7 @@
 (def viewport-width 320)
 (def viewport-height 320)
 (def scale-n 9)
-(def max-n 5)
+(def max-n 10)
 (def min-n 3)
 (def unit 1)
 (def gap 35)
@@ -511,35 +511,35 @@
                :class (str "btn btn-success " (if (> (:n g) min-n) "" "disabled"))
                :key "bu1"
                :on-click down-tap
-               :on-touch-end down-tap}
+               :on-touch-start down-tap}
       [:span {:class "fa fa-chevron-down"}]]
      [:button {:type "button"
                :class (str "btn btn-success " (if (< (:n g) max-n) "" "disabled"))
                :key "bu2"
                :on-click up-tap
-               :on-touch-end up-tap}
+               :on-touch-start up-tap}
       [:span {:class "fa fa-chevron-up"}]]
      [:button {:type "button" :class (str "btn btn-default " (active g 1))
                :key "bu3"
                :on-click one-player
-               :on-touch-end one-player}
+               :on-touch-start one-player}
       "1 player"]
      [:button {:type "button"
                :class (str "btn btn-default " (active g 2))
                :key "bu4"
                :on-click two-player
-               :on-touch-end two-player} "2 player"]
+               :on-touch-start two-player} "2 player"]
      [:button {:type "button"
                :class "btn btn-info"
                :key "bu5"
                :on-click undo
-               :on-touch-end undo}
+               :on-touch-start undo}
       [:span {:class "fa fa-undo"}]]
      [:button {:type "button"
                :class "btn btn-info"
                :key "bu6"
                :on-click redo
-               :on-touch-end redo}
+               :on-touch-start redo}
       [:span {:class "fa fa-repeat"}]]
      ]))
 
