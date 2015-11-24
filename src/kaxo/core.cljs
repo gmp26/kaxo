@@ -1,5 +1,5 @@
 (ns ^:figwheel-always kaxo.core
-    (:require [rum :as r]
+    (:require [rum.core :as r]
               [cljs.reader :as reader]
               [clojure.set :refer (union)]
               [cljsjs.react]
@@ -61,7 +61,7 @@
   [g wps]
   (let [n (:n g)
         r-max (* n n)
-        r-count (inc (count (real-points-removed wps)))]
+        r-count (+ 0 (count (real-points-removed wps)))]
     (cond
      (< r-max r-count) (if (= (:player g) :a) :b :a)
      (= r-max r-count) (:player g)

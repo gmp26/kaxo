@@ -1,5 +1,5 @@
 (ns ^:figwheel-always kaxo.main
-    (:require [rum :as r]
+    (:require [rum.core :as r]
               [cljs.reader :as reader]
               [clojure.set :refer (union)]
               [cljsjs.react]
@@ -162,7 +162,11 @@
    (.preventDefault event)
    (reset-game))
   ([event _]
+   (reset-game event))
+  ([event a b]
+   (prn "strange arity")
    (reset-game event)))
+
 
 (defn commit-move
   "Once a move has been completed, change the game state"
@@ -566,7 +570,7 @@
    [:h2
     ;;"To win, avoid moving last"
     ;; "Last player to move loses"
-    "Last player able to move loses"
+    "Last player able to move wins"
     ]
    [:p
     "To cross out dots, click on them or drag a horizontal, vertical or 45 degree line through them. Lines must not cross."]
@@ -583,7 +587,7 @@
         wps (r/react w-points)]
     [:section {:id "game-container"}
      [:div {:class "full-width"}
-      [:p {:id "header"} "Kaxo"]
+      [:p {:id "header"} "Kaxon"]
       (tool-bar g)
       (status-bar g wps)]
      (svg-grid g)
@@ -591,12 +595,10 @@
      #_(debug-game g)]))
 
 (defn initialise []
-  (.initializeTouchEvents js/React true)
 
   ;; mount main component on html game element
   (r/mount (game-container) (el "game"))
 
-  #_(reset-game)  ; breaks figwheel reload, probably not needed anyway.
   )
 
 (initialise)
